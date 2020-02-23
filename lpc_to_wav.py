@@ -133,17 +133,17 @@ def generate_wav(order, sample_period, num_frames, frame_length, frame_coeffs, f
     sample_coeffs = interp_coeffs(sample_t)
 
     voice_pitch = 105
-    buzz = pitched_sawtooth(voice_pitch, sample_t)
-    noise = white_noise_t(sample_t)
+    buzz, noise = pitched_sawtooth(voice_pitch, sample_t), white_noise_t(sample_t)
     carrier = 1.5 * buzz + 0.5 * noise  #np.power(2, buzz) - 1/(1+buzz) + 0.5 * noise
-    bp = np.zeros(num_samples + order, dtype=np.float64)
-    samples = np.zeros(num_samples, dtype=np.float64)
+    samples = np.zeros(num_samples + order, dtype=np.float64)
 
     #TODO->figure out how to do this without a loop?    
     rev_buffer = np.arange(0, -order, -1) #used to index into the output buffer in reverse order
-    for j, (sample, gain, coeffs) in enumerate(zip(carrier, sample_gains, sample_coeffs)):
-        bp[order + j] = sample - (bp[rev_buffer + order + j - 1 ] @ coeffs) #coeffs[j] * bp[(offset + order - j) % order] * np.sqrt(gain)
-        samples[j] = bp[order + j] * np.sqrt(gain)
+    for j, (sample, coeffs) in enumerate(zip(carrier, sample_coeffs)):
+        samples[order + j] = sample - (samples[rev_buffer + order + j - 1 ] @ coeffs)
+    
+    #apply gain to generated samples
+    samples = samples[order:] * np.sqrt(sample_gains)
     return samples
 
 
