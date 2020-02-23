@@ -51,8 +51,8 @@ def parse_LPC(path):
     lines = data.split('\n')
 
     #parse the different lines of the file
-    xmin = float(lines[3].split('= ')[1])
-    xmax = float(lines[4].split('= ')[1])
+    # xmin = float(lines[3].split('= ')[1])
+    # xmax = float(lines[4].split('= ')[1])
     num_frames = int(lines[5].split('= ')[1])
     frame_length = float(lines[6].split('= ')[1])
     # x1 = float(lines[7].split('= ')[1])
@@ -135,14 +135,14 @@ def generate_wav(order, sample_period, num_frames, frame_length, frame_coeffs, f
     voice_pitch = 105
     buzz, noise = pitched_sawtooth(voice_pitch, sample_t), white_noise_t(sample_t)
     carrier = 1.5 * buzz + 0.5 * noise  #np.power(2, buzz) - 1/(1+buzz) + 0.5 * noise
-    samples = np.zeros(num_samples + order, dtype=np.float64)
+    samples = np.zeros(num_samples + order, dtype=np.float64) #preallocate samples array. pad with 'order' 0s before the start of the sample output, so that the filter draws from them before we have generated 'order' samples 
 
     #TODO->figure out how to do this without a loop?    
     rev_buffer = np.arange(0, -order, -1) #used to index into the output buffer in reverse order
     for j, (sample, coeffs) in enumerate(zip(carrier, sample_coeffs)):
         samples[order + j] = sample - (samples[rev_buffer + order + j - 1 ] @ coeffs)
     
-    #apply gain to generated samples
+    #apply gain to generated samples, and remove the zero padding
     samples = samples[order:] * np.sqrt(sample_gains)
     return samples
 
