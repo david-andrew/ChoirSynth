@@ -21,8 +21,6 @@ def main():
     play(samples_fast)
 
 
-
-
 def play(sample, FS=44100, block=True):
     if sample.dtype in [np.float32, np.float64]: #convert to 16-bit integer
         sample = (sample * np.iinfo(np.int16).max).astype(np.int16)
@@ -31,24 +29,21 @@ def play(sample, FS=44100, block=True):
     if block:
         player.wait_done()
 
+
 # vector functions for producing various waveforms at the specified pitch
 # pitch p (Hz) at time t (s). pitched_squareDC takes a parameter DC for duty cycle
 pitched_sawtooth = np.vectorize(lambda p, t: (t % (1 / p)) * p - 0.5)
 pitched_square =   np.vectorize(lambda p, t: -1.0 if ((t % (1 / p)) * p) < 0.5 else 1.0)
 pitched_squareDC = np.vectorize(lambda p, DC, t: -1.0 if ((t % (1 / p)) * p) < DC else 1.0)
-pitched_triangle = np.vectorize(lambda p, t: 4 * ((t % (1 / p)) * p) - 1.0 if ((t % (1 / p)) * p) < 0.5 else -4 * (((t % (1 / p)) * p) - 0.5) + 1.0)
+pitched_triangle = np.vectorize(lambda p, t: 4 * ((t % (1 / p)) * p) - 1.0 if ((t % (1 / p)) * p) < 0.5 else -4 * ((t % (1 / p)) * p) + 3.0) #py3.8-> pitched_triangle = np.vectorize(lambda p, t: 4 * ratio - 1.0 if (ratio := ((t % (1 / p)) * p)) < 0.5 else -4 * ratio + 3.0)
 pitched_sin = lambda p, t: np.sin(((t % (1 / p)) * p) * 2 * np.pi)
 white_noise_t = np.vectorize(lambda t: np.random.random() * 2 - 1.0)
 # white_noise_n = lambda n: np.random.random(n) * 2 - 1.0
 
 
-
-
 def parse_LPC(path):
     with open(path, 'r') as f:
-        data = f.read()
-
-    lines = data.split('\n')
+        lines = f.read().split('\n')
 
     #parse the different lines of the file
     # xmin = float(lines[3].split('= ')[1])
@@ -100,6 +95,7 @@ def generate_wav_slow(order, sample_period, num_frames, frame_length, frame_coef
 
     return np.array(samples)
 
+
 def generate_wav(order, sample_period, num_frames, frame_length, frame_coeffs, frame_gains):
     #generate frame time array
     #generate output time array
@@ -132,9 +128,10 @@ def generate_wav(order, sample_period, num_frames, frame_length, frame_coeffs, f
     sample_gains = interp_gains(sample_t)
     sample_coeffs = interp_coeffs(sample_t)
 
-    voice_pitch = 105
+    voice_pitch = np.linspace(44, 150, num_samples)#105
     buzz, noise = pitched_sawtooth(voice_pitch, sample_t), white_noise_t(sample_t)
-    carrier = 1.5 * buzz + 0.5 * noise  #np.power(2, buzz) - 1/(1+buzz) + 0.5 * noise
+    carrier = 1.5 * buzz + 0.5 * noise  
+    # carrier = np.power(2, buzz) - 1/(1+buzz) + 0.5 * noise
     samples = np.zeros(num_samples + order, dtype=np.float64) #preallocate samples array. pad with 'order' 0s before the start of the sample output, so that the filter draws from them before we have generated 'order' samples 
 
     #TODO->figure out how to do this without a loop?    
