@@ -1,0 +1,8 @@
+Tasks:
+- downsample recording to 16000Hz -> verify sounds ok
+- run sample through constant-q transform and back (try raw sample rate, and 16000) -> verify sounds ok
+
+
+Notes:
+- 16000Hz sounds perfect for piano
+- probably cannot just directly use inverse constant Q transform. doesn't sound good, so will need to instead use the wavenet

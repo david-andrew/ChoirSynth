@@ -87,7 +87,7 @@ class singer():
         if volume == 0: #indicates rest
             requested_duration = duration - self.duration_error
             true_duration = max(0, requested_duration) #rest duration must be at positive
-            sample = np.zeros(self.FS_out * true_duration)
+            sample = np.zeros(int(self.FS_out * true_duration))
             self.duration_error = true_duration - requested_duration
             return sample
         
