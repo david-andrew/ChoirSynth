@@ -1,3 +1,5 @@
+//this code comes from https://github.com/bisqwit/speech_synth_series/blob/master/ep4-speechsyn/pcmaudio-lpc-wav.cc
+
 #include <cmath>
 #include <vector>
 #include <cstdio>
