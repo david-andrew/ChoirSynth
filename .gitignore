@@ -1,2 +1,6 @@
+#some temporary files from C++. will probably be adjusted in the future
 *.wav
 a.out
+
+#music xml files, some of which aren't allowed for distribution
+music/
