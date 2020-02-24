@@ -7,6 +7,7 @@ import os
 from math import ceil, floor
 import time
 import json
+from lpc_to_wav import parse_lpc
 
 
 #todo implement base class for sound generating objects.
@@ -16,18 +17,27 @@ import json
 
 class singer():
 
-    def __init__(self, singer_name='matt', FS_out=192000, mode='sample'):
+    def __init__(self, singer_name='matt', FS_out=192000, mode='sample'):#mode='sample'):
         self.name = singer_name
+        
         self.FS = None
         self.FS_out = FS_out
+
+        assert(mode in ['sample', 'lpc'])
+        self.mode = mode
+        
         self.phonemes = []  #list of phonemes that this voice can use. should set up a default phoneme for when one is requested that doesn't exist
         self.default_phoneme = 'a'
         with open('phonemes.json') as f:
             self.phoneme_letters = json.load(f) #list of the utf-8 characters that are recognized phonemes
+        
         self.templates = {}
         self.lcrosspoints = {}
         self.ucrosspoints = {}
         self.duration_error = 0 #amount of error in duration sung vs requested be sung
+        
+        self.lpc = {} #coefficients and gains for lpc synthesis
+        
         self.load_samples()
         self.load_lpc()
 
@@ -68,12 +78,35 @@ class singer():
 
 
     def load_lpc(self):
-        lpc_folder = os.path.join('phoneme_data', 'single_period', self.name)
-
-        pass
+        lpc_folder = os.path.join('phoneme_data', 'LPC', self.name)
+        for subddir, dirs, files in os.walk(lpc_folder):
+            for filename in files:
+                if os.path.splitext(filename)[-1] == '.LPC':
+                    phoneme, ext = os.path.splitext(filename)
+                    # order, sample_period, num_frames, frame_length, frame_coeffs, frame_gains = parse_lpc(os.path.join(lpc_folder, filename))
+                    order, _, _, _, frame_coeffs, frame_gains = parse_lpc(os.path.join(lpc_folder, filename))
+                    self.phonemes.append(phoneme)
+                    self.lpc[phoneme] = {
+                        'order': order,
+                        'coeffs': frame_coeffs.mean(axis=0),
+                        'gain': frame_gains.mean(axis=0),
+                    }
 
 
     def sing_excerpt(self, excerpt):
+        if self.mode == 'sample':
+            return self.sing_excerpt_sample_mode(excerpt)
+        elif self.mode == 'lpc':
+            return self.sing_excerpt_lpc_mode(excerpt)
+        else:
+            raise Exception(f'ERROR: {self.mode} mode is not a valid mode for the singer')
+
+    def sing_excerpt_lpc_mode(self, excerpt):
+        pdb.set_trace()
+
+        pass
+
+    def sing_excerpt_sample_mode(self, excerpt):
         note_samples = []
         for note in excerpt:
             note_samples.append(self.sing_note(note))
@@ -87,7 +120,7 @@ class singer():
 
         # self.duration_error = 0
         return sample
-           
+
 
     def sing_note(self, note):
         #for now we are assuming all notes have just a single syllable. later on we will have to handle phoneme cluster cases i.e. dipthongs and tripthings. In the cases where there are more phonemes, all sounds are divided equally with their time

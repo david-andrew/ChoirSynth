@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QApplication, QFileDialog
 import music21
 from math import gcd
 import numpy as np
+from fractions import Fraction as frac
 # from numpy import lcm
 
 
@@ -214,8 +215,7 @@ def get_note_duration(state, note):
     """compute the total duration of a note based on all temp changes"""
     #TODO->implement correctly
     
-
-    return note.quarterLength
+    return frac(note.quarterLength)
 
 
 def get_singer_voice_splits(part):
@@ -293,7 +293,7 @@ if __name__ == '__main__':
     print('Done')
     
     FS_out = 192000
-    matt = singer(singer_name='matt', FS_out=FS_out, mode='sample') #mode='lpc')
+    matt = singer(singer_name='matt', FS_out=FS_out)
 
     print('Creating samples...', end='')
     sys.stdout.flush()
