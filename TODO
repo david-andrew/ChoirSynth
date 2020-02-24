@@ -1,3 +1,4 @@
 Tasks:
 - make singers use rational numbers instead of floats for keeping track of timing
 ---> for long songs, singers can get out of sync because of floating point rounding errors
+- make music parser extract phonemes from music. currently just a default phoneme is used
