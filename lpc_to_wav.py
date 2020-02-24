@@ -128,9 +128,9 @@ def generate_wav(order, sample_period, num_frames, frame_length, frame_coeffs, f
     sample_gains = interp_gains(sample_t)
     sample_coeffs = interp_coeffs(sample_t)
 
-    voice_pitch = np.linspace(44, 150, num_samples)#105
+    voice_pitch = np.linspace(50, 220, num_samples)#105
     buzz, noise = pitched_sawtooth(voice_pitch, sample_t), white_noise_t(sample_t)
-    carrier = 1.5 * buzz + 0.5 * noise  
+    carrier = 1.5 * buzz + 0.1 * noise  
     # carrier = np.power(2, buzz) - 1/(1+buzz) + 0.5 * noise
     samples = np.zeros(num_samples + order, dtype=np.float64) #preallocate samples array. pad with 'order' 0s before the start of the sample output, so that the filter draws from them before we have generated 'order' samples 
 

@@ -293,7 +293,7 @@ if __name__ == '__main__':
     print('Done')
     
     FS_out = 192000
-    matt = singer('matt_raw', FS_out=FS_out)
+    matt = singer(singer_name='matt', FS_out=FS_out, mode='sample') #mode='lpc')
 
     print('Creating samples...', end='')
     sys.stdout.flush()
