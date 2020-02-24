@@ -7,7 +7,7 @@ import os
 from math import ceil, floor
 import time
 import json
-from lpc_to_wav import parse_lpc
+from lpc_to_wav import parse_lpc, pitched_sawtooth, pitched_square, pitched_squareDC, pitched_triangle, white_noise_t 
 
 
 #todo implement base class for sound generating objects.
@@ -17,7 +17,7 @@ from lpc_to_wav import parse_lpc
 
 class singer():
 
-    def __init__(self, singer_name='matt', FS_out=192000, mode='sample'):#mode='sample'):
+    def __init__(self, singer_name='matt', FS_out=192000, mode='lpc'):#FS_out=192000, mode='sample'):
         self.name = singer_name
         
         self.FS = None
@@ -37,7 +37,8 @@ class singer():
         self.duration_error = 0 #amount of error in duration sung vs requested be sung
         
         self.lpc = {} #coefficients and gains for lpc synthesis
-        
+        self.lpc_order = None
+
         self.load_samples()
         self.load_lpc()
 
@@ -61,7 +62,7 @@ class singer():
                     if self.FS is None:     #set default sample rate, or verify that it's the same
                         self.FS = rate
                     else:
-                        assert rate == self.FS
+                        assert(rate == self.FS)
 
                     #save the sample plus its crossover point to the object
                     self.phonemes.append(name)
@@ -91,6 +92,17 @@ class singer():
                         'coeffs': frame_coeffs.mean(axis=0),
                         'gain': frame_gains.mean(axis=0),
                     }
+                    if self.lpc_order is None:
+                        self.lpc_order = order
+                    else:
+                        assert(order == self.lpc_order)
+
+        #silent/unpitched phoneme lpc parameters
+        self.lpc['0'] = {
+            'order': self.lpc_order,
+            'coeffs': np.zeros(self.lpc_order, dtype=np.float64),
+            'gain': np.zeros(1, dtype=np.float64),
+        }
 
 
     def sing_excerpt(self, excerpt):
@@ -101,10 +113,82 @@ class singer():
         else:
             raise Exception(f'ERROR: {self.mode} mode is not a valid mode for the singer')
 
-    def sing_excerpt_lpc_mode(self, excerpt):
-        pdb.set_trace()
 
-        pass
+    def sing_excerpt_lpc_mode(self, excerpt):
+        num_samples = sum([int(note['duration'] * self.FS_out) for note in excerpt])
+        sample_t = np.arange(num_samples, dtype=np.float64) / self.FS_out #time each sample occurs at
+        volumes = np.concatenate([np.ones(int(note['duration'] * self.FS_out), dtype=np.float64) * note['volume'] for note in excerpt])    
+        pitch = np.concatenate([np.ones(int(note['duration'] * self.FS_out), dtype=np.float64) * (note['pitch'] if note['volume'] != 0 else 0.00000000001) for note in excerpt])
+        
+        phonemes = np.concatenate([self.get_phoneme_sequence(note) for note in excerpt])
+        gains = np.concatenate([self.get_phoneme_gains(note) for note in excerpt])
+
+        #get buzz and noise. combine into a single source
+        buzz, noise = pitched_squareDC(pitch, 0.25, sample_t), white_noise_t(sample_t)
+        source = 1.5 * buzz + 0.1 * noise
+
+        samples = np.zeros(num_samples + self.lpc_order, dtype=np.float64) #preallocate samples array. pad with 'order' 0s before the start of the sample output, so that the filter draws from them before we have generated 'order' samples 
+
+        #TODO->figure out how to do this without a loop?    
+        rev_buffer = np.arange(0, -self.lpc_order, -1) #used to index into the output buffer in reverse order
+        for j, (sample, phoneme) in enumerate(zip(source, phonemes)):
+            coeffs = self.lpc[phoneme]['coeffs']
+            samples[self.lpc_order + j] = sample - (samples[rev_buffer + self.lpc_order + j - 1 ] @ coeffs)
+        
+        #apply gain to generated samples, and remove the zero padding
+        samples = samples[self.lpc_order:] * np.sqrt(gains)
+        samples = samples * volumes
+        # pdb.set_trace()
+        return samples
+
+
+
+    def get_phoneme_sequence(self, note):
+        """create an array of unicode characters representing the phoneme at each instant in the note"""
+        num_samples = int(note['duration'] * self.FS_out)
+        sequence = np.chararray(num_samples, unicode=True)
+
+        sequence[:] = '0' #set all unset phonemes to silent
+        
+        if note['volume'] != 0:
+            assert(len(note['syllable']) == 1) #TODO->allow multiple phoneme syllable.
+            phoneme = 'a' if note['syllable'] not in self.phonemes else note['syllable']
+
+            #because not splitting up note into multiple phonemes at the moment, just assign the phoneme to the whole sample
+            sequence[:] = phoneme
+
+        return sequence
+
+    def get_phoneme_gains(self, note):
+        """create an array of gains for each phoneme at each instant in the note"""
+        num_samples = int(note['duration'] * self.FS_out)
+        gains = np.zeros(num_samples, dtype=np.float64)
+
+        if note['volume'] != 0:
+            assert(len(note['syllable']) == 1) #TODO->allow multiple phoneme syllable.
+            phoneme = 'a' if note['syllable'] not in self.phonemes else note['syllable']
+
+            #because not splitting up note into multiple phonemes at the moment, just assign the phoneme to the whole sample
+            gains[:] = self.lpc[phoneme]['gain']
+
+        return gains
+
+    # def get_phoneme_lpc_arrays(self, note):
+    #     """create an array for the phoneme's lpc gains and coefficients"""
+    #     samples = int(note['duration'] * self.FS)
+    #     coeffs = np.zeros((samples, self.lpc_order), dtype=np.float64)
+    #     gains = np.zeros(samples, dtype=np.float64)
+
+    #     if note['volume'] != 0:
+    #         assert(len(note['syllable']) == 1) #TODO->allow multiple phoneme syllable.
+
+    #         phoneme = 'a' if note['syllable'] not in self.phonemes else note['syllable']
+    #         gains[:] = self.lpc[phoneme]['gain']
+    #         coeffs[None, :] = self.lpc[phoneme]['coeffs']
+
+    #     return gains, coeffs
+        
+
 
     def sing_excerpt_sample_mode(self, excerpt):
         note_samples = []

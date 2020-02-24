@@ -292,15 +292,17 @@ if __name__ == '__main__':
     parsed_score = parse_music(raw_score)
     print('Done')
     
-    FS_out = 192000
+    FS_out = 44100
     matt = singer(singer_name='matt', FS_out=FS_out)
 
-    print('Creating samples...', end='')
+    # print('Creating samples...', end='')
+    print('Creating samples...')
     sys.stdout.flush()
     ensemble_output = None
     section_output = None
     num_singers = sum([n for n in parsed_score['num_singers'].values()])
     for part_name, split_parts in parsed_score['excerpts'].items():
+        print(f'--> {part_name}')
         for part in split_parts:
             sample = matt.sing_excerpt(part)
             if section_output is None:
