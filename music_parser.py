@@ -47,9 +47,6 @@ def parse_music(score):
         "voice_parts": list(parts.keys()),                                                  #list the names of each voice part
         "num_singers": num_singers,
         "excerpts": {part_name: get_excerpts(score, part, num_singers[part_name]) for part_name, part in parts.items()}
-        # "excerpts": {part_name: get_excerpts(part) for part_name, part in parts.items()}    #map from voice part to its excerpt
-
-        # "singers_per_part": {part._partName: singers_per_part(part) for part in score.parts},     #list the minimum singers needed for the given voice part
     }
 
     return parsed_score
@@ -57,11 +54,17 @@ def parse_music(score):
 
 def get_voice_parts(score):
     """return a list of the voice parts in the song"""
+
+    #TODO: select only parts that belong to a human voice, and not other instruments
     
     raw_names = [part.partName for part in score.parts]
     parts = {}
     
     for raw_name, part in zip(raw_names, score.parts):
+        if not is_voice_part(raw_name):
+            print(f'skipping non-voice part {raw_name}')
+            continue
+
         if raw_names.count(raw_name) > 1:
             i = 1
             while raw_name + ' ' + int_to_roman(i) in parts:
@@ -74,6 +77,17 @@ def get_voice_parts(score):
 
     return parts
 
+def is_voice_part(part_name):
+    """return whether or not the part name indicates a voice, rather than an instrument"""
+
+    #TODO->this will fail for things like tenor saxophone
+    # possible_part_names = ['soparno', 'alto', 'tenor', 'bass', 'baritone', '']
+    # for possible_name in possible_part_names:
+    #     if possible_name in part_name.lower()
+    #         return True
+    # return False
+
+    return True
 
 def int_to_roman(number):
    """Convert an integer to Roman numerals. from: https://code.activestate.com/recipes/81611-roman-numerals/"""
@@ -144,7 +158,7 @@ def get_measure_landmarks(state, part):
     pdb.set_trace()
 
 def attach_phonemes(parts):
-    """attach phonemes to every note in the score (TODO: that belongs to a human voice)"""
+    """attach phonemes to every note in the score"""
 
     #attach the default phoneme to every note
     for part in parts.values():
@@ -167,6 +181,21 @@ def attach_phonemes(parts):
             for j, voice in enumerate(voices):
                 
                 pdb.set_trace()
+
+def get_max_voice_split(part):
+    """return the maximum number of voices a part splits into"""
+    max_split = 0
+    measures = [element for element in part if type(element) is music21.stream.Measure]
+    for measure in measures:
+        if music21.stream.Voice in [type(e) for e in measure]:
+            voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
+        else:
+            voices = [measure]
+
+        if len(voices) > max_split:
+            max_split = len(voice)
+
+    return max_split
 
 
 
