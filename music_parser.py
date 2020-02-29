@@ -29,9 +29,10 @@ def load_music(initial_directory=""):
 
 def parse_music(score):
     """convert the music21 score object to a more convenient recipe format"""
-    pass
     parts = get_voice_parts(score)
     metadata = score._getMetadata()
+
+    attach_phonemes(parts)
     
     #compute number of singers per (non-solo) section
     # min_singers = {part_name: min_singers_per_part(part) for part_name, part in parts.items()}
@@ -142,6 +143,33 @@ def get_measure_landmarks(state, part):
     
     pdb.set_trace()
 
+def attach_phonemes(parts):
+    """attach phonemes to every note in the score (TODO: that belongs to a human voice)"""
+
+    #attach the default phoneme to every note
+    for part in parts.values():
+        for e in part.flat:
+            if type(e) is music21.note.Note:
+                e.phoneme = 'a'
+
+
+    #construct arrays for notes for every voice in the voice parts
+
+    #attach the phonemes for the lyrics to the notes
+    for part_name, part in parts.items():
+        measures = [element for element in part if type(element) is music21.stream.Measure]
+        for i, measure in enumerate(measures):
+            if music21.stream.Voice in [type(e) for e in measure]:
+                voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
+            else:
+                voices = [measure]
+
+            for j, voice in enumerate(voices):
+                
+                pdb.set_trace()
+
+
+
 def add_grace_duration(excerpt):
     """increase duration of grace notes from 0 to a small fraction of the proceeding note"""
     #WARNING: FOR NOW, ONLY SINGLE GRACE NOTES AT A TIME ARE HANDLED
@@ -185,7 +213,7 @@ def get_measure_notes(voice, chord_num, state):
                 'duration': duration, #60 / tempo * element.quarterLength,
                 'pitch': element.pitch.frequency,
                 #todo->get the correct syllable
-                'syllable': 'a'
+                'syllable': element.phoneme, #custom property attached to all notes
             })
             state.beat += duration
 
@@ -323,4 +351,4 @@ if __name__ == '__main__':
     
     pdb.set_trace()
     # from scipy.io import wavfile
-    # wavfile.write('out.wav', FS_out, ensemble_output)
+    # wavfile.write(f'output/{parsed_score['song_name']}.wav', FS_out, ensemble_output)

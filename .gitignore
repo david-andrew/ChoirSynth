@@ -3,4 +3,9 @@ a.out
 
 #music xml files, some of which aren't allowed for distribution
 music/
+
+#python stuff
 __pycache__
+
+#output wav files
+output/
