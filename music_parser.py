@@ -160,27 +160,75 @@ def get_measure_landmarks(state, part):
 def attach_phonemes(parts):
     """attach phonemes to every note in the score"""
 
-    #attach the default phoneme to every note
+    #attach None to every note's phoneme attribute
     for part in parts.values():
-        for e in part.flat:
-            if type(e) is music21.note.Note:
-                e.phoneme = 'a'
+        for element in part.flat:
+            if type(element) is music21.note.Note:
+                element.phoneme = None
 
 
     #construct arrays for notes for every voice in the voice parts
 
     #attach the phonemes for the lyrics to the notes
     for part_name, part in parts.items():
-        measures = [element for element in part if type(element) is music21.stream.Measure]
-        for i, measure in enumerate(measures):
+        for measure in [element for element in part if type(element) is music21.stream.Measure]:
             if music21.stream.Voice in [type(e) for e in measure]:
                 voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
             else:
                 voices = [measure]
+            
+            for voice in voices:
+                for element in voice:
+                    if type(element) is music21.note.Note and element.phoneme is None:
+                        attach_single_word(element)
+    # for part in parts.values():
+    #     for element in part.flat:
+    #         if type(element) is music21.note.Note and element.phoneme is None:
+    #             attach_single_word(element)
 
-            for j, voice in enumerate(voices):
-                
-                pdb.set_trace()
+
+    #attach the default phoneme to any notes that didn't get a phoneme
+    for part in parts.values():
+        for element in part.flat:
+            if type(element) is music21.note.Note and element.phoneme is None:
+                element.phoneme = 'a'
+
+
+def attach_single_word(element):
+    """collect all notes that this word occurs on, and attach their corresponding phonemes"""
+    
+    #backtrack to the start of the word/note sequence
+    notes = {} #empty set
+
+    while True:
+    #not element.lyrics or element.lyrics[0].syllable not in ['single', 'begin']:
+        notes.add(element)
+        element = element.prev('Note')
+
+
+
+    pdb.set_trace()
+    pass
+
+
+def get_next_note(note):
+    """return the next note in the part"""
+    pdb.set_trace()
+    pass
+
+def get_prev_note(note):
+    """return the previous note in the part"""
+    pdb.set_trace()
+    pass
+
+def remove_punctuation(word):
+    """return a (lowercase) string without any punctuation"""
+    if word is None: word = ''
+    word = [char.lower() for char in word if char.lower() in "abcdefghijklmnopqrstuvwxyz'"] #replace this with the character set for the language. apostrophe included for contractions, e.g. I'll, fav'rite, etc.
+    word = (''.join(word)).lower()
+    return word
+
+
 
 def get_max_voice_split(part):
     """return the maximum number of voices a part splits into"""
