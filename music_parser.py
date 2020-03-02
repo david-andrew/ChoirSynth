@@ -8,11 +8,17 @@ from math import gcd
 import numpy as np
 from fractions import Fraction as frac
 # from numpy import lcm
+import json
 
 
 #parse musicxml sheet music and convert to individual excerpts for each singer
 #TODO:
 # for now we're skipping chords, as well as multiple voices on a line
+
+with open('phonetic_dictionary.json') as f:
+    phonetic_dictionary = json.load(f)
+
+default_phoneme = 'u'
 
 
 def load_music(initial_directory=""):
@@ -123,7 +129,6 @@ def get_excerpts(score, part, num_singers=None):
     # landmarks = get_measure_landmarks(state, part) #compute the beat # for the start of each measure
 
 
-    
     for singer_num in range(num_singers): #n'th singer run through the voice part
         excerpt = []
         
@@ -152,74 +157,190 @@ def get_excerpts(score, part, num_singers=None):
     
     return excerpts
 
-def get_measure_landmarks(state, part):
-    """compute the beat at the start of each measure. Used to ensure choir remians in time"""
+#this is literally measure.offset!
+# def get_measure_landmarks(state, part):
+#     """compute the beat at the start of each measure. Used to ensure choir remians in time"""
     
-    pdb.set_trace()
+#     pdb.set_trace()
 
 def attach_phonemes(parts):
     """attach phonemes to every note in the score"""
 
-    #attach None to every note's phoneme attribute
+    #attach None to every note's phonemes attribute
     for part in parts.values():
         for element in part.flat:
             if type(element) is music21.note.Note:
-                element.phoneme = None
+                element.phonemes = None
+
+
+
+    for part_name, part in parts.items():
+        lyrics, offsets = assemble_lyrics(part)
+        
+        for coordinates in offsets:
+            attach_single_word(lyrics, offsets, coordinates)
+            
+
+        pdb.set_trace()
+        
+
 
 
     #construct arrays for notes for every voice in the voice parts
 
     #attach the phonemes for the lyrics to the notes
-    for part_name, part in parts.items():
-        for measure in [element for element in part if type(element) is music21.stream.Measure]:
-            if music21.stream.Voice in [type(e) for e in measure]:
-                voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
-            else:
-                voices = [measure]
+    # for part_name, part in parts.items():
+    #     for measure in [element for element in part if type(element) is music21.stream.Measure]:
+    #         if music21.stream.Voice in [type(e) for e in measure]:
+    #             voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
+    #         else:
+    #             voices = [measure]
             
-            for voice in voices:
-                for element in voice:
-                    if type(element) is music21.note.Note and element.phoneme is None:
-                        attach_single_word(element)
+    #         for voice in voices:
+    #             for element in voice:
+    #                 if type(element) is music21.note.Note and element.phonemes is None:
+    #                     attach_single_word(element)
     # for part in parts.values():
     #     for element in part.flat:
-    #         if type(element) is music21.note.Note and element.phoneme is None:
+    #         if type(element) is music21.note.Note and element.phonemes is None:
     #             attach_single_word(element)
 
 
-    #attach the default phoneme to any notes that didn't get a phoneme
+    #attach the default phonemes to any notes that didn't get phonemes
     for part in parts.values():
         for element in part.flat:
-            if type(element) is music21.note.Note and element.phoneme is None:
-                element.phoneme = 'a'
+            if type(element) is music21.note.Note and element.phonemes is None:
+                element.phonemes = default_phoneme
 
 
-def attach_single_word(element):
-    """collect all notes that this word occurs on, and attach their corresponding phonemes"""
+def assemble_lyrics(part):
+    """extracts lyrics maps/other useful structures for the specific voice part"""
+    lyrics = []
+    # pointers = {}
+    offsets = {}
     
-    #backtrack to the start of the word/note sequence
-    notes = {} #empty set
+    measures = [element for element in part if type(element) is music21.stream.Measure]
+    for i, measure in enumerate(measures):
+        measure_lyrics = []
+        measure_offset = measure.offset
+        if music21.stream.Voice in [type(e) for e in measure]:
+            voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
+        else:
+            voices = [measure]
+        
+        for j, voice in enumerate(voices):
+            voice_lyrics = []
 
-    while True:
-    #not element.lyrics or element.lyrics[0].syllable not in ['single', 'begin']:
-        notes.add(element)
-        element = element.prev('Note')
+            notes = [element for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]]
 
+            for k, note in enumerate(notes):                
+                voice_lyrics.append(note)
+                coordinates = (i,j,k) # (measure, voice, note)
+                # pointers[coordinates] = note
+                offsets[coordinates] = measure_offset + note.offset
+
+            measure_lyrics.append(voice_lyrics)
+        lyrics.append(measure_lyrics)
+
+    return lyrics, offsets
+
+def attach_single_word(lyrics, offsets, coordinates):
+    """attach the phonemes for a single word"""
+    i, j, k = coordinates
+    element = lyrics[i][j][k]
+    assert(type(element) in [music21.note.Note, music21.chord.Chord])
+
+    #for now, don't worry about notes vs chords. instead just construct the word. When we attach the phoneme, we'll have a function handle chords vs notes for us
+    assert(element.lyrics) #assert lyrics arent empty
+    assert(element.lyrics[0].syllabic in ['begin', 'single'])
+
+
+    #construct the whole word
+    word = ''
+
+    #if single, check for sustain in the next note/voices
+    if element.lyrics[0].syllabic == 'single':
+        word += element.lyrics[0].text
+        coordinates = get_next_note(lyrics, coordinates)
+        if not is_lyrics_sustained(lyrics, offsets, coordinates):
+            #whole word is on this single note
+            print(word)
+            #convert word to phonetics
+            phonemes = get_phonetics(word)
+            attach_phonemes_to_single_element(element, phonemes)
+        else:
+            pdb.set_trace()
+    else: #begin
+        while True:
+            word += element.lyrics[0].text
+            coordinates = get_next_note(lyrics, coordinates)
+            i, j, k = coordinates
+            element = lyrics[i][j][k]
+            #check if element is not last note in word
+            #if element contains syllable, include its text
+            #etc.
+            pdb.set_trace()
+        pdb.set_trace()
+
+
+
+    # if type(element) is music21.note.Note:
+    #     note = element
+    #     if note.phonemes is None:
+    #         pdb.set_trace()
+    #         # assert(element.lyrics)
+    #         #assert that this is a beginning note. otherwise it should already have phonemes
+    # else:
+    #     #treat as a single note, but attach phonemes to every 
+    #     pdb.set_trace()
+
+
+    pdb.set_trace()
+
+def attach_phonemes_to_single_element(element, phonemes):
+    """attach the phonemes to the element. for chords, attach the phonemes to every sub note"""
+    if type(element) is music21.note.Note:
+        element.phonemes = phonemes
+    elif type(element) is music21.chord.Chord:
+        for note in element:
+            note.phonemes = phonemes
+    else:
+        raise Exception(f'ERROR: unexpected type to attach phonemes to: {element}')
+
+def is_lyrics_sustained(lyrics, offsets, coordinates):
+    """determine if the note at the given coordinates is sustained (empty could mean get lyrics from different voice)"""
+    i, j, k = coordinates
+    note = lyrics[i][j][k]
+    if note.lyrics != []:
+        return False
+
+    #check if any of the other voice parts have lyrics at this spot
+    pdb.set_trace()
+
+def get_next_note(lyrics, coordinates):
+    """return the coordinates of the next note in the part"""
+    i, j, k = coordinates
+    if k + 1 < len(lyrics[i][j]):
+        return (i, j, k + 1)
+
+    #else extend into next measure, potentially multuple voices
 
 
     pdb.set_trace()
     pass
 
-
-def get_next_note(note):
-    """return the next note in the part"""
-    pdb.set_trace()
-    pass
-
-def get_prev_note(note):
+def get_prev_note(lyrics, coordinates):
     """return the previous note in the part"""
     pdb.set_trace()
     pass
+
+def get_phonetics(word):
+    word = remove_punctuation(word)
+    try:
+        phonemes = phonetic_dictionary['english']['u.s.'][word]
+    except:
+        phonemes = default_phoneme
+    return phonemes
 
 def remove_punctuation(word):
     """return a (lowercase) string without any punctuation"""
@@ -290,7 +411,7 @@ def get_measure_notes(voice, chord_num, state):
                 'duration': duration, #60 / tempo * element.quarterLength,
                 'pitch': element.pitch.frequency,
                 #todo->get the correct syllable
-                'syllable': element.phoneme, #custom property attached to all notes
+                'syllable': element.phonemes, #custom property attached to all notes
             })
             state.beat += duration
 
