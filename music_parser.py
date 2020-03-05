@@ -185,34 +185,8 @@ def attach_phonemes(parts):
         
         pdb.set_trace() #algorithm to collect words and then attach phonemes
 
-        # for coordinates in offsets:
-        #     attach_single_word(lyrics, offsets, coordinates)
-            
-
-        pdb.set_trace()
+       
         
-
-
-
-    #construct arrays for notes for every voice in the voice parts
-
-    #attach the phonemes for the lyrics to the notes
-    # for part_name, part in parts.items():
-    #     for measure in [element for element in part if type(element) is music21.stream.Measure]:
-    #         if music21.stream.Voice in [type(e) for e in measure]:
-    #             voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
-    #         else:
-    #             voices = [measure]
-            
-    #         for voice in voices:
-    #             for element in voice:
-    #                 if type(element) is music21.note.Note and element.phonemes is None:
-    #                     attach_single_word(element)
-    # for part in parts.values():
-    #     for element in part.flat:
-    #         if type(element) is music21.note.Note and element.phonemes is None:
-    #             attach_single_word(element)
-
 
     #attach the default phonemes to any notes that didn't get phonemes
     for part in parts.values():
@@ -220,37 +194,6 @@ def attach_phonemes(parts):
             if type(element) is music21.note.Note and element.phonemes is None:
                 element.phonemes = default_phoneme
 
-
-# def assemble_lyrics(part):
-#     """extracts lyrics maps/other useful structures for the specific voice part"""
-#     lyrics = []
-#     # pointers = {}
-#     offsets = {}
-    
-#     measures = [element for element in part if type(element) is music21.stream.Measure]
-#     for i, measure in enumerate(measures):
-#         measure_lyrics = []
-#         measure_offset = measure.offset
-#         if music21.stream.Voice in [type(e) for e in measure]:
-#             voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
-#         else:
-#             voices = [measure]
-        
-#         for j, voice in enumerate(voices):
-#             voice_lyrics = []
-
-#             notes = [element for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]]
-
-#             for k, note in enumerate(notes):                
-#                 voice_lyrics.append(note)
-#                 coordinates = (i,j,k) # (measure, voice, note)
-#                 # pointers[coordinates] = note
-#                 offsets[coordinates] = measure_offset + note.offset
-
-#             measure_lyrics.append(voice_lyrics)
-#         lyrics.append(measure_lyrics)
-
-#     return lyrics, offsets
 
 def assemble_lyrics(part):
     """convert the song to an easy to work with data structure for extracting lyrics"""
@@ -266,12 +209,16 @@ def assemble_lyrics(part):
 
         
         notes = [[[element] for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]] for voice in voices]
-        for note_stacks in notes:
-            for note_stack in note_stacks:
+        for voice_num, note_sequence in enumerate(notes):
+            for note_stack in note_sequence:
                 for note in note_stack:
                     note.offset += measure_offset
+                    note.voice_num = voice_num #keep track of wich voice is singing the given note
+
         merged_measure = merge_measure(*notes)
         stream += merged_measure
+
+    return stream
 
 def merge_measure(*voices):
     """recursively merge the lists of notes into a single merged list object"""
