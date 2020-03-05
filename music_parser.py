@@ -20,6 +20,12 @@ with open('phonetic_dictionary.json') as f:
 
 default_phoneme = 'u'
 
+class LyricDAG():
+    def __init__(self, coordinates, parents=None, children=None):
+        self.parents = parents if parents is not None else []
+        self.children = children if children is not None else []
+        self.coordinates = coordinates
+
 
 def load_music(initial_directory=""):
     """Select a musicxml file and return the parsed music21 object"""
@@ -175,10 +181,12 @@ def attach_phonemes(parts):
 
 
     for part_name, part in parts.items():
-        lyrics, offsets = assemble_lyrics(part)
+        part_lyrics = assemble_lyrics(part)
         
-        for coordinates in offsets:
-            attach_single_word(lyrics, offsets, coordinates)
+        pdb.set_trace() #algorithm to collect words and then attach phonemes
+
+        # for coordinates in offsets:
+        #     attach_single_word(lyrics, offsets, coordinates)
             
 
         pdb.set_trace()
@@ -213,89 +221,192 @@ def attach_phonemes(parts):
                 element.phonemes = default_phoneme
 
 
+# def assemble_lyrics(part):
+#     """extracts lyrics maps/other useful structures for the specific voice part"""
+#     lyrics = []
+#     # pointers = {}
+#     offsets = {}
+    
+#     measures = [element for element in part if type(element) is music21.stream.Measure]
+#     for i, measure in enumerate(measures):
+#         measure_lyrics = []
+#         measure_offset = measure.offset
+#         if music21.stream.Voice in [type(e) for e in measure]:
+#             voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
+#         else:
+#             voices = [measure]
+        
+#         for j, voice in enumerate(voices):
+#             voice_lyrics = []
+
+#             notes = [element for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]]
+
+#             for k, note in enumerate(notes):                
+#                 voice_lyrics.append(note)
+#                 coordinates = (i,j,k) # (measure, voice, note)
+#                 # pointers[coordinates] = note
+#                 offsets[coordinates] = measure_offset + note.offset
+
+#             measure_lyrics.append(voice_lyrics)
+#         lyrics.append(measure_lyrics)
+
+#     return lyrics, offsets
+
 def assemble_lyrics(part):
-    """extracts lyrics maps/other useful structures for the specific voice part"""
-    lyrics = []
-    # pointers = {}
-    offsets = {}
+    """convert the song to an easy to work with data structure for extracting lyrics"""
     
     measures = [element for element in part if type(element) is music21.stream.Measure]
+    stream = []
     for i, measure in enumerate(measures):
-        measure_lyrics = []
         measure_offset = measure.offset
         if music21.stream.Voice in [type(e) for e in measure]:
             voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
         else:
             voices = [measure]
+
         
-        for j, voice in enumerate(voices):
-            voice_lyrics = []
+        notes = [[[element] for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]] for voice in voices]
+        for note_stacks in notes:
+            for note_stack in note_stacks:
+                for note in note_stack:
+                    note.offset += measure_offset
+        merged_measure = merge_measure(*notes)
+        stream += merged_measure
 
-            notes = [element for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]]
+def merge_measure(*voices):
+    """recursively merge the lists of notes into a single merged list object"""
+    
+    num_voices = len(voices)
+    if num_voices == 1:
+        return voices[0]
+    elif num_voices > 2:
+        return merge_measure(
+            merge_measure(*voices[:int(num_voices / 2)]), 
+            merge_measure(*voices[int(num_voices / 2):])
+        )
 
-            for k, note in enumerate(notes):                
-                voice_lyrics.append(note)
-                coordinates = (i,j,k) # (measure, voice, note)
-                # pointers[coordinates] = note
-                offsets[coordinates] = measure_offset + note.offset
+    assert(num_voices == 2)
+    voice1, voice2 = voices
+    head1, head2 = 0, 0
 
-            measure_lyrics.append(voice_lyrics)
-        lyrics.append(measure_lyrics)
+    merged_voice = []
 
-    return lyrics, offsets
+    while head1 < len(voice1) and head2 < len(voice2):
+        offset1, offset2 = voice1[head1][0].offset, voice2[head2][0].offset
+        if offset1 < offset2:
+            merged_voice.append(voice1[head1])
+            head1 += 1
+        elif offset2 < offset2:
+            merged_voice.append(voice2[head2])
+            head2 += 1
+        else: #merge into stack
+            merged_voice.append(voice1[head1] + voice2[head2])
+            head1 += 1
+            head2 += 1
 
-def attach_single_word(lyrics, offsets, coordinates):
-    """attach the phonemes for a single word"""
-    i, j, k = coordinates
-    element = lyrics[i][j][k]
-    assert(type(element) in [music21.note.Note, music21.chord.Chord])
+    while head1 < len(voice1):
+        merged_voice.append(voice1[head1])
+        head1 += 1
+    while head2 < len(voice2):
+        merged_voice.append(voice2[head2])
+        head2 += 1
 
-    #for now, don't worry about notes vs chords. instead just construct the word. When we attach the phoneme, we'll have a function handle chords vs notes for us
-    assert(element.lyrics) #assert lyrics arent empty
-    assert(element.lyrics[0].syllabic in ['begin', 'single'])
-
-
-    #construct the whole word
-    word = ''
-
-    #if single, check for sustain in the next note/voices
-    if element.lyrics[0].syllabic == 'single':
-        word += element.lyrics[0].text
-        coordinates = get_next_note(lyrics, coordinates)
-        if not is_lyrics_sustained(lyrics, offsets, coordinates):
-            #whole word is on this single note
-            print(word)
-            #convert word to phonetics
-            phonemes = get_phonetics(word)
-            attach_phonemes_to_single_element(element, phonemes)
-        else:
-            pdb.set_trace()
-    else: #begin
-        while True:
-            word += element.lyrics[0].text
-            coordinates = get_next_note(lyrics, coordinates)
-            i, j, k = coordinates
-            element = lyrics[i][j][k]
-            #check if element is not last note in word
-            #if element contains syllable, include its text
-            #etc.
-            pdb.set_trace()
-        pdb.set_trace()
+    return merged_voice
 
 
 
-    # if type(element) is music21.note.Note:
-    #     note = element
-    #     if note.phonemes is None:
-    #         pdb.set_trace()
-    #         # assert(element.lyrics)
-    #         #assert that this is a beginning note. otherwise it should already have phonemes
-    # else:
-    #     #treat as a single note, but attach phonemes to every 
-    #     pdb.set_trace()
+# def attach_single_word(lyrics, offsets, coordinates):
+#     """attach the phonemes for a single word"""
+#     i, j, k = coordinates
+#     element = lyrics[i][j][k]
+#     assert(type(element) in [music21.note.Note, music21.chord.Chord])
+
+#     #for now, don't worry about notes vs chords. instead just construct the word. When we attach the phoneme, we'll have a function handle chords vs notes for us
+#     assert(element.lyrics) #assert lyrics arent empty
+#     assert(element.lyrics[0].syllabic in ['begin', 'single'])
 
 
-    pdb.set_trace()
+#     # #construct the whole word
+#     # word = ''
+
+#     #entry point to collect all notes for this word
+#     init_node = LyricDAG(coordinates=coordinates)
+
+#     #keep track of the roots of the DAG that we collect for this word
+#     root_nodes = []
+#     root_nodes.append(init_node)
+
+
+#     #DFS on the note until we collected the whole note
+#     dfs_stack = [] #.append() and .pop() for stack operations
+#     visited = set()
+#     dfs_stack.append(init_node)
+
+#     while (len(dfs_stack) > 0):
+#         curr_node = dfs_stack.pop()
+#         visited.add(curr_node.coordinates)
+
+#         prev_coordinates = get_prev_notes(lyrics, offsets, curr_node.coordinates)
+#         for coordinates in prev_coordinates:
+#             if coordinates not in visited:
+#                 node = LyricDAG(coordinates=coordinates)
+#                 curr_node.parents.append(node) #build out the DAG
+#                 dfs_stack.append(node) #add this node to be expanded next
+
+#         next_coordinates = get_next_notes(lyrics, offsets, curr_node.coordinates)
+#         for coordinates in next_coordinates:
+#             if coordinates not in visited:
+#                 node = LyricDAG(coordinates=coordinates)
+#                 curr_node.children.append(node)
+#                 dfs_stack.append(node)
+
+
+
+
+#         pdb.set_trace()
+
+#     pdb.set_trace()
+
+
+#     # #if single, check for sustain in the next note/voices
+#     # if element.lyrics[0].syllabic == 'single':
+#     #     word += element.lyrics[0].text
+#     #     coordinates = get_next_notes(lyrics, coordinates)
+#     #     if not is_lyrics_sustained(lyrics, offsets, coordinates):
+#     #         #whole word is on this single note
+#     #         print(word)
+#     #         #convert word to phonetics
+#     #         phonemes = get_phonetics(word)
+#     #         attach_phonemes_to_single_element(element, phonemes)
+#     #     else:
+#     #         pdb.set_trace()
+#     # else: #begin
+#     #     while True:
+#     #         word += element.lyrics[0].text
+#     #         coordinates = get_next_notes(lyrics, coordinates)
+#     #         i, j, k = coordinates
+#     #         element = lyrics[i][j][k]
+#     #         #check if element is not last note in word
+#     #         #if element contains syllable, include its text
+#     #         #etc.
+#     #         pdb.set_trace()
+#     #     pdb.set_trace()
+
+
+
+#     # if type(element) is music21.note.Note:
+#     #     note = element
+#     #     if note.phonemes is None:
+#     #         pdb.set_trace()
+#     #         # assert(element.lyrics)
+#     #         #assert that this is a beginning note. otherwise it should already have phonemes
+#     # else:
+#     #     #treat as a single note, but attach phonemes to every 
+#     #     pdb.set_trace()
+
+
+#     pdb.set_trace()
+
 
 def attach_phonemes_to_single_element(element, phonemes):
     """attach the phonemes to the element. for chords, attach the phonemes to every sub note"""
@@ -307,34 +418,52 @@ def attach_phonemes_to_single_element(element, phonemes):
     else:
         raise Exception(f'ERROR: unexpected type to attach phonemes to: {element}')
 
-def is_lyrics_sustained(lyrics, offsets, coordinates):
-    """determine if the note at the given coordinates is sustained (empty could mean get lyrics from different voice)"""
-    i, j, k = coordinates
-    note = lyrics[i][j][k]
-    if note.lyrics != []:
-        return False
+# def is_lyrics_sustained(lyrics, offsets, coordinates):
+#     """determine if the note at the given coordinates is sustained (empty could mean get lyrics from different voice)"""
+#     i, j, k = coordinates
+#     note = lyrics[i][j][k]
+    
+#     #if this note has lyrics, then it isn't a sustain from the previous
+#     if note.lyrics != []:
+#         return False
 
-    #check if any of the other voice parts have lyrics at this spot
-    pdb.set_trace()
+#     #check if any of the other voice parts have lyrics at this spot
+#     pdb.set_trace()
 
-def get_next_note(lyrics, coordinates):
-    """return the coordinates of the next note in the part"""
-    i, j, k = coordinates
-    if k + 1 < len(lyrics[i][j]):
-        return (i, j, k + 1)
+# def get_next_notes(lyrics, offsets, coordinates):
+#     """return an array of coordinates of the next notes in the part if any"""
+#     pdb.set_trace()
 
-    #else extend into next measure, potentially multuple voices
+#     #needs to determine if the next note is a part of this current note.
+#     #probably need to pass single vs begin vs middle vs end...
 
 
-    pdb.set_trace()
-    pass
+#     i, j, k = coordinates
+#     if k + 1 < len(lyrics[i][j]):
+#         candidate_coordinates = (i, j, k + 1)
+#         if is_lyrics_sustained(lyrics, offsets, candidate_coordinates):
+#             return candidate_coordinates
 
-def get_prev_note(lyrics, coordinates):
-    """return the previous note in the part"""
-    pdb.set_trace()
-    pass
+#     #else extend into next measure, potentially multuple voices
+
+
+#     pdb.set_trace()
+#     pass
+
+# def get_prev_notes(lyrics, offsets, coordinates):
+#     """return an array of coordinates of the previous notes in the part if any"""
+#     i, j, k = coordinates
+#     element = lyrics[i][j][k]
+    
+#     #no previous notes for current note if current is the start or a whole word
+#     if element.lyrics and element.lyrics[0].syllabic in ['begin', 'single']:
+#         return []
+
+#     pdb.set_trace()
+#     pass
 
 def get_phonetics(word):
+    """return the IPA phonemes that make the given word (TBD how to handle homographs)"""
     word = remove_punctuation(word)
     try:
         phonemes = phonetic_dictionary['english']['u.s.'][word]
