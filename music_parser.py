@@ -327,9 +327,11 @@ def assemble_word(word_notes):
         pdb.set_trace()
         phonemes = default_phoneme
 
+    
     syllables = split_phonemes_into_syllables(phonemes)
 
     # pdb.set_trace()
+    print(syllables)
     # print(phonemes, '->', word_notes)
 
 
@@ -378,16 +380,15 @@ def split_phonemes_into_syllables(phonemes):
         pdb.set_trace()
         raise Exception(f'ERROR: phonetic word "{phonemes}" starting at "...{phonemes[i:]}" contains letters not in phonetic vowels, consonants or diphthongs')
 
-    if len(raw_syllables) > 0:
+    if len(raw_syllables) > 0 and prev_was_consonant:
         raw_syllables[-1] += raw_syllable
     else:
         raw_syllables.append(raw_syllable)
 
-    # pdb.set_trace()
+    #convert raw syllables to (attack, sustain, release) tuples
+    syllables = [syllable_asr(raw_syllable) for raw_syllable in raw_syllables]
 
-
-    #todo, return syllables converted to asr
-    print(raw_syllables)
+    return syllables
 
 def phonemes_starts_with(phoneme_set, phonemes, i=0):
     """if phonemes starts with a phoneme in phoneme_set, return that phoneme, otherwise None. i indicates index to start from"""
@@ -397,33 +398,46 @@ def phonemes_starts_with(phoneme_set, phonemes, i=0):
     return None
 
 
-def split_syllable_into_asr(syllable):
+def syllable_asr(raw_syllable):
     """convert the phoneme syllable into attack sustain release tuple"""
 
     #verify that the word is made of correct characters
-    for p in syllable:
-        assert p in consonants or p in vowels
+    i = 0
+    while i < len(raw_syllable):
+        p = phonemes_starts_with(consonants + diphthongs + vowels, raw_syllable, i)
+        assert(p is not None)
+        i += len(p)
 
     #break the syllable into an [optional] initial consonant (attack), middle vowel (sustain), and [optional] ending consonant (release)
     attack, sustain, release = '', '', ''
 
-    for p in syllable:
-        if p not in consonants:
+    i = 0
+    while i < len(raw_syllable):
+        p = phonemes_starts_with(consonants, raw_syllable, i)
+        if p is None:
             break
         attack += p
+        i += len(p)
 
-    for p in syllable[len(attack):]:
-        if p not in vowels:
+    while i < len(raw_syllable):
+        p = phonemes_starts_with(diphthongs + vowels, raw_syllable, i)
+        if p is None:
             break
         sustain += p
+        i += len(p)
 
-    for p in syllable[len(attack+sustain):]:
-        if p not in consonants:
+    while i < len(raw_syllable):
+        p = phonemes_starts_with(consonants, raw_syllable, i)
+        if p is None:
             break
         release += p
+        i += len(p)
 
-    assert attack + sustain + release == syllable   #we should have successfuly split the entire syllable
-    assert len(sustain) > 0     #syllabars are of the form {C},V,{C}, i.e. sustain must contian a vowel
+    try:
+        assert attack + sustain + release == raw_syllable   #we should have successfuly split the entire syllable
+        assert len(sustain) > 0     #syllabars are of the form {C},V,{C}, i.e. sustain must contian a vowel
+    except:
+        pdb.set_trace()
 
     return (attack, sustain, release)
 
