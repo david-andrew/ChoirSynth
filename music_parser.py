@@ -29,11 +29,12 @@ with open('phonetic_dictionary.json') as f:
 
 default_phoneme = 'u'
 
-class LyricDAG():
-    def __init__(self, coordinates, parents=None, children=None):
-        self.parents = parents if parents is not None else []
-        self.children = children if children is not None else []
-        self.coordinates = coordinates
+class StaticNote():
+    def __init__(self, pitch, duration, offset, phonemes):
+        self.pitch = pitch
+        self.duration = duration
+        self.offset = offset
+        self.phonemes = phonemes
 
 
 def load_music(initial_directory=""):
