@@ -181,21 +181,23 @@ def get_excerpts(score, part, num_singers=None):
 def attach_lyrics_to_parts(parts):
     """attach phonemes to every note in the score"""
 
-    #attach None to every note's phonemes attribute
-    for part in parts.values():
-        for element in part.flat:
-            if type(element) is music21.note.Note:
-                element.phonemes = None
+    # #attach None to every note's phonemes attribute
+    # for part in parts.values():
+    #     for element in part:
+    #         if type(element) in [music21.note.Note, music21.chord.Chord]:
+    #             attach_phonemes_to_single_element(element, None)
+    #             # element.phonemes = None
 
 
 
     for part_name, part in parts.items():
         part_stream, max_splits = assemble_lyrics(part)
         
-        for voice_num in range(max_splits):
+        for voice_num in range(1): #range(max_splits): #for now just use voice 1
             head = 0
             current_word = []
             while True: #(coordinates := get_next_note(part_stream, voice_num, head)) is not None:
+                
                 #collect the next word
                 coordinates = get_next_note(part_stream, voice_num, head)
                 if coordinates is None: 
@@ -210,16 +212,16 @@ def attach_lyrics_to_parts(parts):
 
                 head = coordinates[0] + 1
 
-        pdb.set_trace() #algorithm to collect words and then attach phonemes
+        pdb.set_trace()
 
-       
-        
+    pdb.set_trace() #algorithm to collect words and then attach phonemes
 
-    #attach the default phonemes to any notes that didn't get phonemes
-    for part in parts.values():
-        for element in part.flat:
-            if type(element) is music21.note.Note and element.phonemes is None:
-                element.phonemes = default_phoneme
+
+    # #attach the default phonemes to any notes that didn't get phonemes
+    # for part in parts.values():
+    #     for element in part:
+    #         if type(element) in [music21.note.Note, music21.chord.Chord] and element.lyric is None:
+    #             attach_phonemes_to_single_element(element, default_phoneme)
 
 
 def assemble_lyrics(part):
@@ -319,22 +321,80 @@ def assemble_word(word_notes):
             word += note.lyrics[0].text
 
     phonemes = get_phonetics(word)
+    #TODO->if phonemes is None, means we need to look for substrings or continuations
+    if phonemes is None:
+        print(f'ERROR: "{word}" is not in the phonetic dictionary. replacing with default_phoneme "{default_phoneme}"')
+        pdb.set_trace()
+        phonemes = default_phoneme
 
     syllables = split_phonemes_into_syllables(phonemes)
 
-    pdb.set_trace()
+    # pdb.set_trace()
     # print(phonemes, '->', word_notes)
 
 
 def split_phonemes_into_syllables(phonemes):
     """return a list of syllables, i.e. (attack, sustain, release)"""
 
-    # raw_syllables = []
-    # raw_syllable = ''
-    # for i in range(len(phonemes)):
-    #     if 
+    raw_syllables = []
+    raw_syllable = ''
+    prev_was_consonant = True #if the last phoneme was a consonant
+    
+    i = 0
+    while i < len(phonemes):
+        p = phonemes_starts_with(diphthongs, phonemes, i)
+        if p is not None:
+            if prev_was_consonant:
+                raw_syllable += p
+            else:
+                raw_syllables.append(raw_syllable)
+                raw_syllable = '' + p
+            prev_was_consonant = False
+            i += len(p)
+            continue
+        
+        p = phonemes_starts_with(consonants, phonemes, i)
+        if p is not None:
+            if prev_was_consonant:
+                raw_syllable += p
+            else:
+                raw_syllables.append(raw_syllable)
+                raw_syllable = '' + p
+            prev_was_consonant = True
+            i += len(p)
+            continue
 
-    pdb.set_trace()
+        p = phonemes_starts_with(vowels, phonemes, i)
+        if p is not None:
+            if prev_was_consonant:
+                raw_syllable += p
+            else:
+                raw_syllables.append(raw_syllable)
+                raw_syllable = '' + p
+            prev_was_consonant = False
+            i += len(p)
+            continue
+
+        pdb.set_trace()
+        raise Exception(f'ERROR: phonetic word "{phonemes}" starting at "...{phonemes[i:]}" contains letters not in phonetic vowels, consonants or diphthongs')
+
+    if len(raw_syllables) > 0:
+        raw_syllables[-1] += raw_syllable
+    else:
+        raw_syllables.append(raw_syllable)
+
+    # pdb.set_trace()
+
+
+    #todo, return syllables converted to asr
+    print(raw_syllables)
+
+def phonemes_starts_with(phoneme_set, phonemes, i=0):
+    """if phonemes starts with a phoneme in phoneme_set, return that phoneme, otherwise None. i indicates index to start from"""
+    for p in phoneme_set:
+        if phonemes.startswith(p, i):
+            return p
+    return None
 
 
 def split_syllable_into_asr(syllable):
@@ -371,23 +431,36 @@ def split_syllable_into_asr(syllable):
 def attach_phonemes_to_single_element(element, phonemes):
     """attach the phonemes to the element. for chords, attach the phonemes to every sub note"""
     if type(element) is music21.note.Note:
-        element.phonemes = phonemes
+        element.lyric = phonemes
     elif type(element) is music21.chord.Chord:
+        # element.phonemes = phonemes
         for note in element:
-            note.phonemes = phonemes
+            note.lyric = phonemes
     else:
         raise Exception(f'ERROR: unexpected type to attach phonemes to: {element}')
 
+def is_word_in_dictionary(word):
+    """returns whether a word is in the dictionary or not"""
+    word = remove_punctuation(word)
+    return word in phonetic_dictionary
 
-def get_phonetics(word):
+
+def substring_is_in_phonetic_dictionationary(substring):
+    """check if a substring is in the phonetic dictionary. if true, returns original word"""
+    
+    for word in phonetic_dictionary.keys():
+        if word.startswith(substring):
+            return word
+    return None
+
+
+def get_phonetics(word):    
     """return the IPA phonemes that make the given word (TBD how to handle homographs)"""
     word = remove_punctuation(word)
     try:
-        phonemes = phonetic_dictionary[word]
+        return phonetic_dictionary[word]
     except:
-        print(f'ERROR: "{word}" is not in the phonetic dictionary. replacing with default_phoneme "{default_phoneme}"')
-        phonemes = default_phoneme
-    return phonemes
+        return None
 
 def remove_punctuation(word):
     """return a (lowercase) string without any punctuation"""
@@ -458,7 +531,7 @@ def get_measure_notes(voice, chord_num, state):
                 'duration': duration, #60 / tempo * element.quarterLength,
                 'pitch': element.pitch.frequency,
                 #todo->get the correct syllable
-                'syllable': element.phonemes, #custom property attached to all notes
+                # 'syllable': element.lyric, #custom property attached to all notes
             })
             state.beat += duration
 
