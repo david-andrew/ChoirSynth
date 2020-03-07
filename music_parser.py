@@ -30,11 +30,64 @@ with open('phonetic_dictionary.json') as f:
 default_phoneme = 'u'
 
 class StaticNote():
-    def __init__(self, pitch, duration, offset, phonemes):
-        self.pitch = pitch
+    def __init__(self, pitch=None, duration=None, offset=None, word=None, phonemes=None):
+        self.pitch = pitch #can be either a single number, or array of pitches to represent a chord. None indicates rest
         self.duration = duration
         self.offset = offset
+        self.word = word
         self.phonemes = phonemes
+
+    def __getitem__(self, key):
+        if key == 'pitch':
+            return self.pitch
+        elif key == 'duration':
+            return self.duration
+        elif key == 'offset':
+            return self.offset
+        elif key == 'word':
+            return self.word
+        elif key == 'phonemes':
+            return self.phonemes
+
+    def keys(self):
+        return ['pitch', 'duration', 'offset', 'word', 'phonemes']
+
+    def __str__(self):
+        word = '' if self.word is None else ', word: \'' + self.word + '\''
+        phonemes = '' if self.phonemes is None else ', phonemes: \'' + self.phonemes + '\''
+        if self.pitch is None:
+            return f'<Rest duration: {self.duration}, offset: {self.offset}>'
+        elif isinstance(self.pitch, list):
+            return f'<Chord pitches: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}>'
+        else:
+            return f'<Note pitch: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}>'
+
+
+    def __hash__(self):
+        return hash(self.pitch, self.duration, self.offset, self.word, self.phonemes)
+                    
+    @staticmethod
+    def from21element(element, **kwargs):
+        """convert the music21 element to a static note"""
+        duration = frac(element.quarterLength)
+        offset = frac(element.offset)
+
+        if type(element) is music21.chord.Chord:
+            pitch = [note.pitch.frequency for note in element]
+        elif type(element) is music21.note.Note:
+            pitch = element.pitch.frequency
+        elif type(element) is music21.note.Rest:
+            pitch = None
+        else:
+            raise Exception(f'ERROR: unknown music21 element type {element}')
+
+        raw_static_m21 = StaticNote(pitch=pitch, duration=duration, offset=offset)
+        return StaticNote(**dict(raw_static_m21, **kwargs))
+
+    @staticmethod
+    def fromstaticnote(static_note, **kwargs):
+        """return a new StaticNote given an old one plus keyword arguments"""
+        return StaticNote(**dict(static_note, **kwargs))
 
 
 def load_music(initial_directory=""):
@@ -192,6 +245,13 @@ def attach_lyrics_to_parts(parts):
 
 
     for part_name, part in parts.items():
+        # for element in part.flat:
+        #     if type(element) in [music21.chord.Chord, music21.note.Note, music21.note.Rest]:
+        #         note = StaticNote.from21element(element)
+        #         print(note)
+
+        # pdb.set_trace()
+
         part_stream, max_splits = assemble_lyrics(part)
         
         for voice_num in range(1): #range(max_splits): #for now just use voice 1
