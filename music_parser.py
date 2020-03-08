@@ -30,7 +30,8 @@ with open('phonetic_dictionary.json') as f:
 default_phoneme = 'u'
 
 class StaticNote():
-    def __init__(self, pitch=None, duration=None, offset=None, word=None, phonemes=None, lyrics=None):
+    def __init__(self, voice=None, pitch=None, duration=None, offset=None, word=None, phonemes=None, lyrics=None):
+        self.voice = voice
         self.pitch = pitch #can be either a single number, or array of pitches to represent a chord. None indicates rest
         self.duration = duration
         self.offset = offset
@@ -39,7 +40,9 @@ class StaticNote():
         self.lyrics = lyrics
 
     def __getitem__(self, key):
-        if key == 'pitch':
+        if key == 'voice':
+            return self.voice
+        elif key == 'pitch':
             return self.pitch
         elif key == 'duration':
             return self.duration
@@ -51,29 +54,33 @@ class StaticNote():
             return self.phonemes
         elif key == 'lyrics':
             return self.lyrics
+        else:
+            raise Exception(f'ERROR: unrecognized key "{key}" for StaticNote')
 
     def keys(self):
-        return ['pitch', 'duration', 'offset', 'word', 'phonemes', 'lyrics']
+        return ['voice', 'pitch', 'duration', 'offset', 'word', 'phonemes', 'lyrics']
 
-    def __str__(self):
+    def __repr__(self):
         word = '' if self.word is None else f', word: \'{self.word}\''
         phonemes = '' if self.phonemes is None else f', phonemes: \'{self.phonemes}\''
         lyrics = '' if self.lyrics is None else f', lyrics: {self.lyrics}'
         if self.pitch is None:
-            return f'<Rest duration: {self.duration}, offset: {self.offset}>'
+            return f'<Rest voice: {self.voice}, duration: {self.duration}, offset: {self.offset}>'
         elif isinstance(self.pitch, list):
-            return f'<Chord pitches: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}{lyrics}>'
+            return f'<Chord voice: {self.voice}, pitches: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}{lyrics}>'
         else:
-            return f'<Note pitch: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}{lyrics}>'
+            return f'<Note voice: {self.voice}, pitch: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}{lyrics}>'
 
-    def __repr__(self):
-        return str(self)
+    def __str__(self):
+        #TODO->make this a more compact representation
+        return repr(self)
 
     def __hash__(self):
-        return hash(self.pitch, self.duration, self.offset, self.word, self.phonemes, self.lyrics)
+        return hash(self.voice, self.pitch, self.duration, self.offset, self.word, self.phonemes, self.lyrics)
        
     def __eq__(self, other):
-        return (self.pitch == other.pitch 
+        return (self.voice == other.voice
+            and self.pitch == other.pitch 
             and self.duration == other.duration 
             and self.offset == other.offset 
             and self.word == other.word
@@ -81,7 +88,7 @@ class StaticNote():
             and self.lyrics == other.lyrics)
 
     @staticmethod
-    def from21element(element, **kwargs):
+    def from21element(element, voice=None, **kwargs):
         """convert the music21 element to a static note"""
         duration = frac(element.quarterLength)
         offset = frac(element.offset)
@@ -98,7 +105,7 @@ class StaticNote():
         else:
             raise Exception(f'ERROR: unknown music21 element type {element}')
 
-        raw_static_m21 = StaticNote(pitch=pitch, duration=duration, offset=offset, lyrics=lyrics)
+        raw_static_m21 = StaticNote(voice=voice, pitch=pitch, duration=duration, offset=offset, lyrics=lyrics)
         return StaticNote(**dict(raw_static_m21, **kwargs))
 
     @staticmethod
@@ -376,16 +383,15 @@ def assemble_part_stream(part):
         notes = [
                     [
                         [
-                            StaticNote.from21element(element, offset=frac(element.offset)+frac(measure_offset))
+                            StaticNote.from21element(element, voice=voice_num, offset=frac(element.offset)+frac(measure_offset))
                         ] for element in voice if type(element) in [music21.note.Note, music21.note.Rest, music21.chord.Chord]
-                    ] for voice in voices
+                    ] for voice_num, voice in enumerate(voices)
                 ]
 
-        for voice_num, note_sequence in enumerate(notes):
-            for note_stack in note_sequence:
-                for note in note_stack:
-                    note.global_offset = frac(note.offset) + (measure_offset)
-                    note.voice_num = voice_num #keep track of wich voice is singing the given note
+        # for voice_num, note_sequence in enumerate(notes):
+        #     for note_stack in note_sequence:
+        #         for note in note_stack:
+        #             note.voice_num = voice_num #keep track of wich voice is singing the given note
 
         merged_measure = merge_measure(*notes)
         part_stream += merged_measure
@@ -445,7 +451,7 @@ def get_next_note(part_stream, voice_num, head):
     
     for i, note_stack in enumerate(part_stream[head:]):
         for j, note in enumerate(note_stack):
-            if note.voice_num == voice_num:
+            if note.voice == voice_num:
                 return (head + i, j)
 
     return None
