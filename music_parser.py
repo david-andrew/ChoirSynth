@@ -30,12 +30,13 @@ with open('phonetic_dictionary.json') as f:
 default_phoneme = 'u'
 
 class StaticNote():
-    def __init__(self, pitch=None, duration=None, offset=None, word=None, phonemes=None):
+    def __init__(self, pitch=None, duration=None, offset=None, word=None, phonemes=None, lyrics=None):
         self.pitch = pitch #can be either a single number, or array of pitches to represent a chord. None indicates rest
         self.duration = duration
         self.offset = offset
         self.word = word
         self.phonemes = phonemes
+        self.lyrics = lyrics
 
     def __getitem__(self, key):
         if key == 'pitch':
@@ -48,24 +49,37 @@ class StaticNote():
             return self.word
         elif key == 'phonemes':
             return self.phonemes
+        elif key == 'lyrics':
+            return self.lyrics
 
     def keys(self):
-        return ['pitch', 'duration', 'offset', 'word', 'phonemes']
+        return ['pitch', 'duration', 'offset', 'word', 'phonemes', 'lyrics']
 
     def __str__(self):
         word = '' if self.word is None else ', word: \'' + self.word + '\''
         phonemes = '' if self.phonemes is None else ', phonemes: \'' + self.phonemes + '\''
+        lyrics = '' if self.lyrics is None else f', lyrics: {self.lyrics}'
         if self.pitch is None:
             return f'<Rest duration: {self.duration}, offset: {self.offset}>'
         elif isinstance(self.pitch, list):
-            return f'<Chord pitches: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}>'
+            return f'<Chord pitches: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}{lyrics}>'
         else:
-            return f'<Note pitch: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}>'
+            return f'<Note pitch: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}{lyrics}>'
 
+    def __repr__(self):
+        return str(self)
 
     def __hash__(self):
-        return hash(self.pitch, self.duration, self.offset, self.word, self.phonemes)
-                    
+        return hash(self.pitch, self.duration, self.offset, self.word, self.phonemes, self.lyrics)
+       
+    def __eq__(self, other):
+        return (self.pitch == other.pitch 
+            and self.duration == other.duration 
+            and self.offset == other.offset 
+            and self.word == other.word
+            and self.phonemes == other.phonemes
+            and self.lyrics == other.lyrics)
+
     @staticmethod
     def from21element(element, **kwargs):
         """convert the music21 element to a static note"""
@@ -74,20 +88,51 @@ class StaticNote():
 
         if type(element) is music21.chord.Chord:
             pitch = [note.pitch.frequency for note in element]
+            lyrics = StaticNoteLyrics.fromlyrics(element.lyrics)
         elif type(element) is music21.note.Note:
             pitch = element.pitch.frequency
+            lyrics = StaticNoteLyrics.fromlyrics(element.lyrics)
         elif type(element) is music21.note.Rest:
             pitch = None
+            lyrics = None
         else:
             raise Exception(f'ERROR: unknown music21 element type {element}')
 
-        raw_static_m21 = StaticNote(pitch=pitch, duration=duration, offset=offset)
+        raw_static_m21 = StaticNote(pitch=pitch, duration=duration, offset=offset, lyrics=lyrics)
         return StaticNote(**dict(raw_static_m21, **kwargs))
 
     @staticmethod
     def fromstaticnote(static_note, **kwargs):
         """return a new StaticNote given an old one plus keyword arguments"""
         return StaticNote(**dict(static_note, **kwargs))
+
+class StaticNoteLyrics():
+    def __init__(self, text=None, syllabic=None):
+        self.text = text
+        self.syllabic = syllabic
+
+    def __str__(self):
+        return f'<Lyrics text: {self.text}, syllabic: {self.syllabic}>'
+
+    def __repr__(self):
+        return str(self)
+
+    def __eq__(self, other):
+        return self.text == other.text and self.syllabic == other.syllabic
+
+    def __hash__(self):
+        return hash(self.text, self.syllabic)
+
+    def __bool__(self):
+        return self.text is not None and self.syllabic is not None
+
+    @staticmethod
+    def fromlyrics(lyrics):
+        """for now only a single line of lyrics are allowed"""
+        if lyrics:
+            return StaticNoteLyrics(text=lyrics[0].text, syllabic=lyrics[0].syllabic)
+        else:
+            return StaticNoteLyrics()
 
 
 def load_music(initial_directory=""):
@@ -245,13 +290,6 @@ def attach_lyrics_to_parts(parts):
 
 
     for part_name, part in parts.items():
-        # for element in part.flat:
-        #     if type(element) in [music21.chord.Chord, music21.note.Note, music21.note.Rest]:
-        #         note = StaticNote.from21element(element)
-        #         print(note)
-
-        # pdb.set_trace()
-
         part_stream, max_splits = assemble_lyrics(part)
         
         for voice_num in range(1): #range(max_splits): #for now just use voice 1
@@ -265,9 +303,9 @@ def attach_lyrics_to_parts(parts):
                     break
                 note = get_note_at(part_stream, coordinates)
                 
-                if note.lyrics and note.lyrics[0].syllabic in ['single', 'begin']: #TODO->eventually allow multiple verses
-                    assemble_word(current_word)
-                    current_word = [] #reset for the next word
+                if note.lyrics and note.lyrics.syllabic in ['single', 'begin']: #TODO->eventually allow multiple verses
+                        assemble_word(current_word)
+                        current_word = [] #reset for the next word
 
                 current_word.append(note)
 
@@ -301,7 +339,7 @@ def assemble_lyrics(part):
         if len(voices) > max_splits:
             max_splits = len(voices)
         
-        notes = [[[element] for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]] for voice in voices]
+        notes = [[[StaticNote.from21element(element)] for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]] for voice in voices]
         for voice_num, note_sequence in enumerate(notes):
             for note_stack in note_sequence:
                 for note in note_stack:
@@ -379,7 +417,7 @@ def assemble_word(word_notes):
     word = ''
     for note in word_notes:
         if note.lyrics:
-            word += note.lyrics[0].text
+            word += note.lyrics.text
 
     phonemes = get_phonetics(word)
     #TODO->if phonemes is None, means we need to look for substrings or continuations
@@ -391,7 +429,7 @@ def assemble_word(word_notes):
     
     syllables = split_phonemes_into_syllables(phonemes)
 
-    # pdb.set_trace()
+    pdb.set_trace()
     print(syllables)
     # print(phonemes, '->', word_notes)
 
