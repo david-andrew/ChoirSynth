@@ -112,7 +112,10 @@ class StaticNoteLyrics():
         self.syllabic = syllabic
 
     def __str__(self):
-        return f'<Lyrics text: {self.text}, syllabic: {self.syllabic}>'
+        if (self):
+            return f'<Lyrics text: {self.text}, syllabic: {self.syllabic}>'
+        else:
+            return 'None'
 
     def __repr__(self):
         return str(self)
@@ -339,7 +342,13 @@ def assemble_lyrics(part):
         if len(voices) > max_splits:
             max_splits = len(voices)
         
-        notes = [[[StaticNote.from21element(element)] for element in voice if type(element) in [music21.note.Note, music21.chord.Chord]] for voice in voices]
+        notes = [
+                    [
+                        [
+                            StaticNote.from21element(element, offset=frac(element.offset + measure_offset))
+                        ] for element in voice if type(element) in [music21.note.Note, music21.note.Rest, music21.chord.Chord]
+                    ] for voice in voices
+                ]
         for voice_num, note_sequence in enumerate(notes):
             for note_stack in note_sequence:
                 for note in note_stack:
@@ -429,7 +438,6 @@ def assemble_word(word_notes):
     
     syllables = split_phonemes_into_syllables(phonemes)
 
-    pdb.set_trace()
     print(syllables)
     # print(phonemes, '->', word_notes)
 
