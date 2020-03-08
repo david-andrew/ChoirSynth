@@ -56,8 +56,8 @@ class StaticNote():
         return ['pitch', 'duration', 'offset', 'word', 'phonemes', 'lyrics']
 
     def __str__(self):
-        word = '' if self.word is None else ', word: \'' + self.word + '\''
-        phonemes = '' if self.phonemes is None else ', phonemes: \'' + self.phonemes + '\''
+        word = '' if self.word is None else f', word: \'{self.word}\''
+        phonemes = '' if self.phonemes is None else f', phonemes: \'{self.phonemes}\''
         lyrics = '' if self.lyrics is None else f', lyrics: {self.lyrics}'
         if self.pitch is None:
             return f'<Rest duration: {self.duration}, offset: {self.offset}>'
@@ -113,7 +113,7 @@ class StaticNoteLyrics():
 
     def __str__(self):
         if (self):
-            return f'<Lyrics text: {self.text}, syllabic: {self.syllabic}>'
+            return f'<Lyrics text: \'{self.text}\', syllabic: {self.syllabic}>'
         else:
             return 'None'
 
@@ -136,6 +136,35 @@ class StaticNoteLyrics():
             return StaticNoteLyrics(text=lyrics[0].text, syllabic=lyrics[0].syllabic)
         else:
             return StaticNoteLyrics()
+
+class StaticSyllable():
+    def __init__(self, attack=None, sustain=None, release=None):
+        if attack is None:
+            attack = ''
+        if sustain is None:
+            sustain = ''
+        if release is None:
+            release = ''
+
+        self.attack = attack
+        self.sustain = sustain
+        self.release = release
+
+    def __str__(self):
+        return f'{self.attack}{self.sustain}{self.release}'
+
+    def __repr__(self):
+        return f'attack: {self.attack}, sustain: {self.sustain}, release: {self.release}'
+
+    def __eq__(self, other):
+        return self.attack == other.attack and self.sustain == other.sustain and self.release == other.release
+
+    def __hash__(self):
+        return hash(self.attack, self.sustain, self.release)
+
+    def __bool__(self):
+        return str(self) != ''
+
 
 
 def load_music(initial_directory=""):
@@ -293,7 +322,7 @@ def attach_lyrics_to_parts(parts):
 
 
     for part_name, part in parts.items():
-        part_stream, max_splits = assemble_lyrics(part)
+        part_stream, max_splits = assemble_part_stream(part)
         
         for voice_num in range(1): #range(max_splits): #for now just use voice 1
             head = 0
@@ -307,13 +336,15 @@ def attach_lyrics_to_parts(parts):
                 note = get_note_at(part_stream, coordinates)
                 
                 if note.lyrics and note.lyrics.syllabic in ['single', 'begin']: #TODO->eventually allow multiple verses
-                        assemble_word(current_word)
-                        current_word = [] #reset for the next word
+                    assemble_word(current_word)
+                    current_word = [] #reset for the next word
 
                 current_word.append(note)
 
                 head = coordinates[0] + 1
 
+        for note in part_stream: 
+            print(note)
         pdb.set_trace()
 
     pdb.set_trace() #algorithm to collect words and then attach phonemes
@@ -326,7 +357,7 @@ def attach_lyrics_to_parts(parts):
     #             attach_phonemes_to_single_element(element, default_phoneme)
 
 
-def assemble_lyrics(part):
+def assemble_part_stream(part):
     """convert the song to an easy to work with data structure for extracting lyrics"""
     
     measures = [element for element in part if type(element) is music21.stream.Measure]
@@ -418,8 +449,12 @@ def get_next_note(part_stream, voice_num, head):
 
     return None
 
-def assemble_word(word_notes):
+def assemble_word(word_elements):
     """construct the word from the list of notes, and attach the phonemes for that word"""
+    
+    #get a list of the notes without any rests
+    word_notes = [note for note in word_elements if type(note) is not music21.note.Rest]
+
     if len(word_notes) == 0:
         return
 
@@ -428,17 +463,42 @@ def assemble_word(word_notes):
         if note.lyrics:
             word += note.lyrics.text
 
+    #assign the constructed word to all notes that construct this word (TODO->this is probably unnecessary)
+    for note in word_notes:
+        note.word = word
+
     phonemes = get_phonetics(word)
-    #TODO->if phonemes is None, means we need to look for substrings or continuations
-    if phonemes is None:
+    if phonemes is None: #TODO->if phonemes is None, means we need to look for substrings or continuations
         print(f'ERROR: "{word}" is not in the phonetic dictionary. replacing with default_phoneme "{default_phoneme}"')
         pdb.set_trace()
         phonemes = default_phoneme
-
     
     syllables = split_phonemes_into_syllables(phonemes)
 
-    print(syllables)
+
+    attacks = [bool(note.lyrics) for note in word_notes]
+    releases = [(i+1 >= len(word_notes) or attacks[i+1]) for i in range(len(word_notes))]
+
+    i = 0
+    for note, attack, release in zip(word_notes, attacks, releases):
+        if attack:
+            cur_syllable = syllables[i]
+            i += 1
+
+        attack_phonemes = cur_syllable[0] if attack else ''
+        sustain_phonemes = cur_syllable[1]
+        release_phonemes = cur_syllable[2] if release else ''
+        syllable = StaticSyllable(attack_phonemes, sustain_phonemes, release_phonemes)
+        note.phonemes = syllable
+
+
+    #for each note in word notes, 
+    #determine if it has attack, and or release
+    #attach syllables to each note (remove attack/release for notes without attach/releae)
+    #first note, and notes following a released note, move to the next syllable
+    #for the last note in the word notes, all remeaining phonemes get squished onto it? for now just truncate...
+
+    # print(syllables)
     # print(phonemes, '->', word_notes)
 
 
