@@ -376,10 +376,11 @@ def assemble_part_stream(part):
         notes = [
                     [
                         [
-                            StaticNote.from21element(element, offset=frac(element.offset + measure_offset))
+                            StaticNote.from21element(element, offset=frac(element.offset)+frac(measure_offset))
                         ] for element in voice if type(element) in [music21.note.Note, music21.note.Rest, music21.chord.Chord]
                     ] for voice in voices
                 ]
+
         for voice_num, note_sequence in enumerate(notes):
             for note_stack in note_sequence:
                 for note in note_stack:
