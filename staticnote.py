@@ -32,6 +32,18 @@ class StaticNote():
     def keys(self):
         return ['voice', 'pitch', 'duration', 'offset', 'word', 'phonemes', 'lyrics']
 
+    def is_rest(self):
+        return self.pitch is None
+
+    def is_sung(self):
+        return not self.is_rest()
+
+    def is_chord(self):
+        return isinstance(self.pitch, list)
+
+    def is_note(self):
+        return self.is_sung() and not self.is_chord()
+
     def __repr__(self):
         word = '' if self.word is None else f', word: \'{self.word}\''
         phonemes = '' if self.phonemes is None else f', phonemes: \'{self.phonemes}\''

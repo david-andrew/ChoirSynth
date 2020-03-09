@@ -31,6 +31,43 @@ with open('phonetic_dictionary.json') as f:
 default_phoneme = 'u'
 
 
+class PartStream():
+    def __init__(self, part_stream, max_voice_splits):
+        self.part_stream = part_stream
+        self.max_voice_splits = max_voice_splits
+
+    def __iter__(self):
+        return PartStreamIterator(self.part_stream, self.max_voice_splits)
+
+    def __str__(self):
+        out = ''
+        for stream_stack in self:
+            out += str(stream_stack) + '\n'
+
+        return out
+
+
+class PartStreamIterator():
+    def __init__(self, part_stream, max_voice_splits):
+        self.i = 0;
+        self.part_stream = part_stream
+        self.max_voice_splits = max_voice_splits
+        self.current = [None] * max_voice_splits
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.i >= len(self.part_stream):
+            raise StopIteration
+        note_stack = self.part_stream[self.i]
+        for note in note_stack:
+            self.current[note.voice] = note
+
+        self.i += 1
+        return self.current
+
+
 def load_music(initial_directory=""):
     """Select a musicxml file and return the parsed music21 object"""
     app = QApplication(sys.argv)
@@ -45,26 +82,28 @@ def load_music(initial_directory=""):
 
 def parse_music(score):
     """convert the music21 score object to a more convenient recipe format"""
-    parts = get_voice_parts(score)
+    parts = get_parts_streams(get_voice_parts(score))
     metadata = score._getMetadata()
-
-    attach_lyrics_to_parts(parts)
     
     #compute number of singers per (non-solo) section
     # min_singers = {part_name: min_singers_per_part(part) for part_name, part in parts.items()}
     recommended_singers = {part_name: recommended_singers_per_part(part) for part_name, part in parts.items()}
+    pdb.set_trace()
     singers_per_section = lcm([num_singers for part_name, num_singers in recommended_singers.items() if 'solo' not in part_name.lower()])    
+    pdb.set_trace()
     singers_per_section = lcm([singers_per_section, 6]) #ensure that at least 6 singers are in a given section
+    pdb.set_trace()
     singers_per_solo = 1
+    pdb.set_trace()
     num_singers = {part_name: (singers_per_solo if 'solo' in part_name.lower() else singers_per_section) for part_name in parts.keys()}
-    
+    pdb.set_trace()
     parsed_score = {
         "song_name": metadata.title if metadata.title else "untitled",                      #title of the piece of music
         "voice_parts": list(parts.keys()),                                                  #list the names of each voice part
         "num_singers": num_singers,
         "excerpts": {part_name: get_excerpts(score, part, num_singers[part_name]) for part_name, part in parts.items()}
     }
-
+    pdb.set_trace()
     return parsed_score
 
 
@@ -105,7 +144,7 @@ def is_voice_part(part_name):
 
     return True
 
-def int_to_roman(number):
+def int_to_roman(number): #TODO->convert this to music21 helper function
    """Convert an integer to Roman numerals. from: https://code.activestate.com/recipes/81611-roman-numerals/"""
    if type(number) != type(1):
       raise TypeError("expected integer, got %s" % type(number))
@@ -173,22 +212,16 @@ def get_excerpts(score, part, num_singers=None):
     
 #     pdb.set_trace()
 
-def attach_lyrics_to_parts(parts):
+def get_parts_streams(parts):
     """attach phonemes to every note in the score"""
 
-    # #attach None to every note's phonemes attribute
-    # for part in parts.values():
-    #     for element in part:
-    #         if type(element) in [music21.note.Note, music21.chord.Chord]:
-    #             attach_phonemes_to_single_element(element, None)
-    #             # element.phonemes = None
-
-
-
+    parts_streams = {}
+    
     for part_name, part in parts.items():
-        part_stream, max_splits = assemble_part_stream(part)
-        
-        for voice_num in range(1): #range(max_splits): #for now just use voice 1
+        part_stream, max_voice_splits = assemble_part_stream(part)
+        parts_streams[part_name] = PartStream(part_stream, max_voice_splits) #store a reference to this part_stream under the part_name
+
+        for voice_num in range(1): #range(max_voice_splits): #for now just use voice 1
             head = 0
             current_word = []
             while True: #(coordinates := get_next_note(part_stream, voice_num, head)) is not None:
@@ -206,20 +239,9 @@ def attach_lyrics_to_parts(parts):
                 current_word.append(note)
 
                 head = coordinates[0] + 1
-
-        for note in part_stream: 
-            print(note)
         pdb.set_trace()
 
-    pdb.set_trace() #algorithm to collect words and then attach phonemes
-
-
-    # #attach the default phonemes to any notes that didn't get phonemes
-    # for part in parts.values():
-    #     for element in part:
-    #         if type(element) in [music21.note.Note, music21.chord.Chord] and element.lyric is None:
-    #             attach_phonemes_to_single_element(element, default_phoneme)
-
+    return parts_streams
 
 def assemble_part_stream(part):
     """convert the song to an easy to work with data structure for extracting lyrics"""
@@ -317,7 +339,7 @@ def assemble_word(word_elements):
     """construct the word from the list of notes, and attach the phonemes for that word"""
     
     #get a list of the notes without any rests
-    word_notes = [note for note in word_elements if type(note) is not music21.note.Rest]
+    word_notes = [note for note in word_elements if note.is_sung()]
 
     if len(word_notes) == 0:
         return
@@ -648,6 +670,7 @@ def min_singers_per_part(part):
 
 def recommended_singers_per_part(part):
     """compute the recommended number of singers per voice part so that notes in chords have the same number of singers per note"""
+    pdb.set_trace()
     singer_voice_splits = get_singer_voice_splits(part)
     recommended_singers = lcm([sum(measure) for measure in singer_voice_splits])
     return recommended_singers
