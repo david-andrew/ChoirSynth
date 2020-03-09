@@ -1,6 +1,11 @@
 from fractions import Fraction as frac
 import music21
 
+def freq_to_name(freq):
+    a = music21.pitch.Pitch()
+    a.frequency = freq
+    return a.nameWithOctave
+
 class StaticNote():
     def __init__(self, voice=None, pitch=None, duration=None, offset=None, word=None, phonemes=None, lyrics=None):
         self.voice = voice
@@ -48,15 +53,25 @@ class StaticNote():
         word = '' if self.word is None else f', word: \'{self.word}\''
         phonemes = '' if self.phonemes is None else f', phonemes: \'{self.phonemes}\''
         lyrics = '' if self.lyrics is None else f', lyrics: {self.lyrics}'
-        if self.pitch is None:
+        if self.is_rest():
             return f'<Rest voice: {self.voice}, duration: {self.duration}, offset: {self.offset}>'
-        elif isinstance(self.pitch, list):
+        elif self.is_chord():
             return f'<Chord voice: {self.voice}, pitches: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}{lyrics}>'
         else:
             return f'<Note voice: {self.voice}, pitch: {self.pitch}, duration: {self.duration}, offset: {self.offset}{word}{phonemes}{lyrics}>'
 
     def __str__(self):
         #TODO->make this a more compact representation
+        phonemes = '⌀' if self.phonemes is None else f'{self.phonemes}'
+
+        if self.is_rest():
+            return f'<Rest {self.duration}>'
+        elif self.is_chord():
+            pitches = ', '.join([freq_to_name(freq) for freq in self.pitch])
+            return f'<Chord {self.duration} [{phonemes}] [{pitches}]>'
+        else:
+            return f'<Note {self.duration} [{phonemes}] {freq_to_name(self.pitch)}>'
+
         return repr(self)
 
     def __hash__(self):

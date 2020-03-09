@@ -42,7 +42,7 @@ class PartStream():
     def __str__(self):
         out = ''
         for stream_stack in self:
-            out += str(stream_stack) + '\n'
+            out += f'[{", ".join([str(note) for note in stream_stack])}]\n'
 
         return out
 
