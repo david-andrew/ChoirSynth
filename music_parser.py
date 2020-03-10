@@ -253,7 +253,7 @@ def get_parts_streams(parts):
         part_stream, max_voice_splits = assemble_part_stream(part)
         parts_streams[part_name] = PartStream(part_stream, max_voice_splits) #store a reference to this part_stream under the part_name
 
-        for voice_num in range(1): #range(max_voice_splits): #for now just use voice 1
+        for voice_num in range(max_voice_splits):
             head = 0
             current_word = []
             while True: #(coordinates := get_next_note(part_stream, voice_num, head)) is not None:
@@ -261,6 +261,7 @@ def get_parts_streams(parts):
                 #collect the next word
                 coordinates = get_next_note(part_stream, voice_num, head)
                 if coordinates is None: 
+                    assemble_word(current_word) #attach phonemes to any remeaining notes in current word
                     break
                 note = get_note_at(part_stream, coordinates)
                 
@@ -375,7 +376,8 @@ def assemble_word(word_elements):
     #get a list of the notes without any rests
     word_notes = [note for note in word_elements if note.is_sung()]
 
-    if len(word_notes) == 0:
+    #if there are no sung notes or all sung notes have no lyrics, then return
+    if len(word_notes) == 0 or sum(bool(note.lyrics) for note in word_notes) == 0:
         return
 
     word = ''
