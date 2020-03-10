@@ -4,7 +4,7 @@ import music21
 def freq_to_name(freq):
     a = music21.pitch.Pitch()
     a.frequency = freq
-    return a.nameWithOctave
+    return a.unicodeNameWithOctave
 
 class StaticNote():
     def __init__(self, voice=None, pitch=None, duration=None, offset=None, word=None, phonemes=None, lyrics=None):
@@ -67,7 +67,7 @@ class StaticNote():
         if self.is_rest():
             return f'<Rest {self.duration}>'
         elif self.is_chord():
-            pitches = ', '.join([freq_to_name(freq) for freq in self.pitch])
+            pitches = ' '.join([freq_to_name(freq) for freq in self.pitch])
             return f'<Chord {self.duration} [{phonemes}] [{pitches}]>'
         else:
             return f'<Note {self.duration} [{phonemes}] {freq_to_name(self.pitch)}>'

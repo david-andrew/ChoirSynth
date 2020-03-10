@@ -49,7 +49,8 @@ class PartStream():
 
 class PartStreamIterator():
     def __init__(self, part_stream, max_voice_splits):
-        self.i = 0;
+        self.i = 0
+        self.offset = frac(0)
         self.part_stream = part_stream
         self.max_voice_splits = max_voice_splits
         self.current = [None] * max_voice_splits
@@ -60,12 +61,43 @@ class PartStreamIterator():
     def __next__(self):
         if self.i >= len(self.part_stream):
             raise StopIteration
+        
+        #determine the smallest duration to progress
+        #construct the stack with all notes that length. adjust phonemes accordingly (i.e. if in the middle, remove attack/release)
+
+
+        # if sum(note is not None for note in self.current) > 1:
+        #     pdb.set_trace()
+
+        #remove any notes that have ended
+        self.current = [note if note is not None and note.offset + note.duration > self.offset else None for note in self.current]
+
         note_stack = self.part_stream[self.i]
         for note in note_stack:
             self.current[note.voice] = note
 
+        delta = min([note.duration for note in self.current if note is not None])
+        current_stack = []
+        for note in self.current:
+            if note is None:
+                current_stack.append(None)
+                continue
+            attack = self.offset == note.offset
+            release = note.offset + note.duration == self.offset + delta
+            if note.phonemes:
+                new_phonemes = StaticSyllable(attack=note.phonemes.attack if attack else '',  sustain=note.phonemes.sustain, release=note.phonemes.release if release else '')
+            else:
+                new_phonemes = None
+
+            current_stack.append(StaticNote.fromstaticnote(note, offset=self.offset, duration=delta, phonemes=new_phonemes))
+        # if sum(note is not None for note in self.current) > 1:
+        #     pdb.set_trace()
+
+        self.offset += delta
+
         self.i += 1
-        return self.current
+        # return self.current
+        return current_stack
 
 
 def load_music(initial_directory=""):
@@ -239,6 +271,8 @@ def get_parts_streams(parts):
                 current_word.append(note)
 
                 head = coordinates[0] + 1
+        
+        print(parts_streams[part_name])
         pdb.set_trace()
 
     return parts_streams
