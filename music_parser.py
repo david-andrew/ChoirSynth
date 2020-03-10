@@ -39,6 +39,9 @@ class PartStream():
     def __iter__(self):
         return PartStreamIterator(self.part_stream, self.max_voice_splits)
 
+    def spread_iter(self):
+        return PartStreamIterator(self.part_stream, self.max_voice_splits, spread=True)
+
     def __str__(self):
         out = ''
         for stream_stack in self:
@@ -48,12 +51,13 @@ class PartStream():
 
 
 class PartStreamIterator():
-    def __init__(self, part_stream, max_voice_splits):
+    def __init__(self, part_stream, max_voice_splits, spread=False):
         self.i = 0
         self.offset = frac(0)
         self.part_stream = part_stream
         self.max_voice_splits = max_voice_splits
         self.current = [None] * max_voice_splits
+        self.spread = spread
 
     def __iter__(self):
         return self
@@ -61,21 +65,16 @@ class PartStreamIterator():
     def __next__(self):
         if self.i >= len(self.part_stream):
             raise StopIteration
-        
-        #determine the smallest duration to progress
-        #construct the stack with all notes that length. adjust phonemes accordingly (i.e. if in the middle, remove attack/release)
-
-
-        # if sum(note is not None for note in self.current) > 1:
-        #     pdb.set_trace()
 
         #remove any notes that have ended
         self.current = [note if note is not None and note.offset + note.duration > self.offset else None for note in self.current]
 
+        #update the current notes based on the next notes stack in the part stream
         note_stack = self.part_stream[self.i]
         for note in note_stack:
             self.current[note.voice] = note
 
+        #set the durations and syllables of the current notes to fit the shortest note
         delta = min([note.duration for note in self.current if note is not None])
         current_stack = []
         for note in self.current:
@@ -90,14 +89,16 @@ class PartStreamIterator():
                 new_phonemes = None
 
             current_stack.append(StaticNote.fromstaticnote(note, offset=self.offset, duration=delta, phonemes=new_phonemes))
-        # if sum(note is not None for note in self.current) > 1:
-        #     pdb.set_trace()
+
 
         self.offset += delta
-
         self.i += 1
-        # return self.current
-        return current_stack
+
+        if not self.spread:
+            return current_stack #return notes, chords, and rests
+        else:
+            return [note for notes in current_stack if notes is not None for note in notes.spread()] #return a list of only notes or rests (spread chords into notes)
+
 
 
 def load_music(initial_directory=""):

@@ -49,6 +49,14 @@ class StaticNote():
     def is_note(self):
         return self.is_sung() and not self.is_chord()
 
+    def spread(self):
+        """if chord, return a list of individual notes"""
+        if self.is_rest() or self.is_note():
+            return [self]
+        else:
+            return [StaticNote.fromstaticnote(self, pitch=pitch) for pitch in self.pitch]
+
+
     def __repr__(self):
         word = '' if self.word is None else f', word: \'{self.word}\''
         phonemes = '' if self.phonemes is None else f', phonemes: \'{self.phonemes}\''
