@@ -30,9 +30,10 @@ class singer():
         
         self.phonemes = []  #list of phonemes that this voice can use. should set up a default phoneme for when one is requested that doesn't exist
         self.default_phoneme = 'u'
-        with open('phonemes.json') as f:
-            self.phoneme_letters = json.load(f) #list of the utf-8 characters that are recognized phonemes
-        
+        with open('phonetic_dictionary.json') as f:
+            phonetic_dictionary = json.load(f) #list of the utf-8 characters that are recognized phonemes
+            self.phoneme_letters = phonetic_dictionary['english']['u.s.']
+
         self.templates = {}
         self.lcrosspoints = {}
         self.ucrosspoints = {}
@@ -47,39 +48,39 @@ class singer():
             self.load_lpc()
 
 
-    def load_samples(self):
-        """load single period waveforms for the specified singer"""
-        sample_folder = os.path.join('phoneme_data', 'single_period', self.name)
-        for subddir, dirs, files in os.walk(sample_folder):
-            for filename in files:
-                if os.path.splitext(filename)[-1] == '.wav':
-                    name, ext = os.path.splitext(filename)
-                    rate, sample = wavfile.read(os.path.join(sample_folder, filename))
-                    sample = np.concatenate((np.array([sample[-1]], dtype=np.float32), sample, np.array([sample[0]], dtype=np.float32))) #add the repeat sample to the end of the array
-                    spline = CubicSpline(np.arange(sample.shape[0]), sample)
-                    roots = spline.roots()
-                    length = sample.shape[0]
-                    lower = roots[0] if roots[0] > 0 else roots[1]
-                    upper = roots[-2] if roots[-2] - (length - 2) > 0 else roots[-1]
+    # def load_samples(self):
+    #     """load single period waveforms for the specified singer"""
+    #     sample_folder = os.path.join('phoneme_data', 'single_period', self.name)
+    #     for subddir, dirs, files in os.walk(sample_folder):
+    #         for filename in files:
+    #             if os.path.splitext(filename)[-1] == '.wav':
+    #                 name, ext = os.path.splitext(filename)
+    #                 rate, sample = wavfile.read(os.path.join(sample_folder, filename))
+    #                 sample = np.concatenate((np.array([sample[-1]], dtype=np.float32), sample, np.array([sample[0]], dtype=np.float32))) #add the repeat sample to the end of the array
+    #                 spline = CubicSpline(np.arange(sample.shape[0]), sample)
+    #                 roots = spline.roots()
+    #                 length = sample.shape[0]
+    #                 lower = roots[0] if roots[0] > 0 else roots[1]
+    #                 upper = roots[-2] if roots[-2] - (length - 2) > 0 else roots[-1]
 
 
-                    if self.FS_in is None:     #set default sample rate, or verify that it's the same
-                        self.FS_in = rate
-                    else:
-                        assert(rate == self.FS_in)
+    #                 if self.FS_in is None:     #set default sample rate, or verify that it's the same
+    #                     self.FS_in = rate
+    #                 else:
+    #                     assert(rate == self.FS_in)
 
-                    #save the sample plus its crossover point to the object
-                    self.phonemes.append(name)
-                    self.templates[name] = sample
-                    self.lcrosspoints[name] = lower
-                    self.ucrosspoints[name] = upper
+    #                 #save the sample plus its crossover point to the object
+    #                 self.phonemes.append(name)
+    #                 self.templates[name] = sample
+    #                 self.lcrosspoints[name] = lower
+    #                 self.ucrosspoints[name] = upper
 
-        #make template entries for aliased phonemes (e.g. j is pronounced with i, and approximate w is pronounced with u)
-        aliases = self.phoneme_letters['aliases']
-        for p, a in aliases.items():
-            self.templates[p] = self.templates[a]
-            self.lcrosspoints[p] = self.lcrosspoints[a]
-            self.ucrosspoints[p] = self.ucrosspoints[a]
+    #     #make template entries for aliased phonemes (e.g. j is pronounced with i, and approximate w is pronounced with u)
+    #     aliases = self.phoneme_letters['aliases']
+    #     for p, a in aliases.items():
+    #         self.templates[p] = self.templates[a]
+    #         self.lcrosspoints[p] = self.lcrosspoints[a]
+    #         self.ucrosspoints[p] = self.ucrosspoints[a]
 
 
     def load_lpc(self):
@@ -238,20 +239,20 @@ class singer():
         
 
 
-    def sing_excerpt_sample_mode(self, excerpt):
-        note_samples = []
-        for note in excerpt:
-            note_samples.append(self.sing_note(note))
+    # def sing_excerpt_sample_mode(self, excerpt):
+    #     note_samples = []
+    #     for note in excerpt:
+    #         note_samples.append(self.sing_note(note))
 
-        start = 0
-        sample_length = sum([note_sample.shape[0] for note_sample in note_samples])
-        sample = np.zeros(sample_length)
-        for note_sample in note_samples:
-            sample[start:start+note_sample.shape[0]] = note_sample
-            start += len(note_sample)
+    #     start = 0
+    #     sample_length = sum([note_sample.shape[0] for note_sample in note_samples])
+    #     sample = np.zeros(sample_length)
+    #     for note_sample in note_samples:
+    #         sample[start:start+note_sample.shape[0]] = note_sample
+    #         start += len(note_sample)
 
-        # self.duration_error = 0
-        return sample
+    #     # self.duration_error = 0
+    #     return sample
 
 
     def sing_note(self, note):
