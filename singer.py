@@ -8,7 +8,8 @@ from math import ceil, floor
 from fractions import Fraction as frac
 import time
 import json
-from lpc_to_wav import parse_lpc, pitched_sawtooth, pitched_square, pitched_squareDC, pitched_triangle, white_noise_t 
+from lpc_to_wav import parse_lpc, pitched_sawtooth, pitched_square, pitched_squareDC, pitched_triangle, white_noise_t
+from staticnote import StaticSyllable
 
 
 #todo implement base class for sound generating objects.
@@ -337,6 +338,8 @@ class singer():
 
     def clock_phonemes(self, phonemes, duration):
         # compute the duration of each portion of the syllable
+        if phonemes is None:
+            phonemes = StaticSyllable(sustain=self.default_phoneme)
         attack_duration = 0 if len(phonemes.attack) == 0 else min(frac(3, 20), frac(1, 4) * duration)
         release_duration = 0 if len(phonemes.release) == 0 else min(frac(3, 20), frac(1, 4) * duration)
         sustain_duration = duration - attack_duration - release_duration
