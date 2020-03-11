@@ -120,23 +120,18 @@ def parse_music(score):
     
     #compute number of singers per (non-solo) section
     # min_singers = {part_name: min_singers_per_part(part) for part_name, part in parts.items()}
-    recommended_singers = {part_name: recommended_singers_per_part(part) for part_name, part in parts.items()}
-    pdb.set_trace()
-    singers_per_section = lcm([num_singers for part_name, num_singers in recommended_singers.items() if 'solo' not in part_name.lower()])    
-    pdb.set_trace()
-    singers_per_section = lcm([singers_per_section, 6]) #ensure that at least 6 singers are in a given section
-    pdb.set_trace()
+    recommended_singers_by_part = {part_name: recommended_singers_per_part(part) for part_name, part in parts.items()}
+    singers_per_section = lcm([num_singers for part_name, num_singers in recommended_singers_by_part.items() if 'solo' not in part_name.lower()])    
+    # singers_per_section = lcm([singers_per_section, 6]) #ensure that at least 6 singers are in a given section
     singers_per_solo = 1
-    pdb.set_trace()
     num_singers = {part_name: (singers_per_solo if 'solo' in part_name.lower() else singers_per_section) for part_name in parts.keys()}
-    pdb.set_trace()
     parsed_score = {
         "song_name": metadata.title if metadata.title else "untitled",                      #title of the piece of music
         "voice_parts": list(parts.keys()),                                                  #list the names of each voice part
         "num_singers": num_singers,
         "excerpts": {part_name: get_excerpts(score, part, num_singers[part_name]) for part_name, part in parts.items()}
     }
-    pdb.set_trace()
+
     return parsed_score
 
 
@@ -193,57 +188,72 @@ def int_to_roman(number): #TODO->convert this to music21 helper function
    return numeral
 
 
-def get_excerpts(score, part, num_singers=None):
+def get_excerpts(score, part, num_singers):
     """return a list of excerpts that comprise the voice part. multiple excerpts indicate chords and/or multiple voices per line"""
-
-    if num_singers is None:
-        num_singers = max(min_singers_per_part(part), 6) #ensure at least 6 singers per part, if specific number not specified
 
     excerpts = []
     measures = [element for element in part if type(element) is music21.stream.Measure]
-    splits = get_singer_voice_splits(part)
-
-
-
-    state = type('test', (), {})()                      #empty container class to hold the current state of the singer
-    state.score = score                                 #store the score in the object
-    state.metronome = score.metronomeMarkBoundaries()   #used for calculating tempo
-    # landmarks = get_measure_landmarks(state, part) #compute the beat # for the start of each measure
-
-
-    for singer_num in range(num_singers): #n'th singer run through the voice part
+    
+    for singer_num in range(num_singers):
         excerpt = []
-        
-        state.dynamics = 'mf'                               #reset dynamics to default
-        state.beat = 0                                      #reset beat count to zero
-       
-        for measure, split in zip(measures, splits):
-            if len(split) == 1:
-                voice = measure
-                chord_num = singer_num % split[0]
-            else:
-                remainder = singer_num % sum(split)
-                voice_num = 0
-                while remainder > sum(split[:voice_num+1]):
-                    voice_num += 1
-                # measure = [element for element in measure if type(element) is music21.]
-                voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
-                voice = voices[voice_num]
-                chord_num = remainder - sum(split[:voice_num])
-            
-            excerpt += get_measure_notes(voice, chord_num, state)
-        
-        #final post processing of the excerpt
+
+        # dynamics = 'mf' #TODO->need to update how dynamics are computed... I think these should be passed separately
+
+        for note_stack in  part.spread_iter():
+            note_idx = singer_num % len(note_stack)
+            excerpt.append(note_stack[note_idx])
+
         add_grace_duration(excerpt) #grace notes initiall have 0 duration. add a duration to them
         excerpts.append(excerpt)
-    
+
     return excerpts
 
-#this is literally measure.offset!
-# def get_measure_landmarks(state, part):
-#     """compute the beat at the start of each measure. Used to ensure choir remians in time"""
+
+
+
+#     splits = get_singer_voice_splits(part)
+
+
+
+#     state = type('test', (), {})()                      #empty container class to hold the current state of the singer
+#     state.score = score                                 #store the score in the object
+#     state.metronome = score.metronomeMarkBoundaries()   #used for calculating tempo
+#     # landmarks = get_measure_landmarks(state, part) #compute the beat # for the start of each measure
+
+
+#     for singer_num in range(num_singers): #n'th singer run through the voice part
+#         excerpt = []
+        
+#         state.dynamics = 'mf'                               #reset dynamics to default
+#         state.beat = 0                                      #reset beat count to zero
+       
+#         for measure, split in zip(measures, splits):
+#             if len(split) == 1:
+#                 voice = measure
+#                 chord_num = singer_num % split[0]
+#             else:
+#                 remainder = singer_num % sum(split)
+#                 voice_num = 0
+#                 while remainder > sum(split[:voice_num+1]):
+#                     voice_num += 1
+#                 # measure = [element for element in measure if type(element) is music21.]
+#                 voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
+#                 voice = voices[voice_num]
+#                 chord_num = remainder - sum(split[:voice_num])
+            
+#             excerpt += get_measure_notes(voice, chord_num, state)
+        
+#         #final post processing of the excerpt
+#         add_grace_duration(excerpt) #grace notes initiall have 0 duration. add a duration to them
+#         excerpts.append(excerpt)
     
-#     pdb.set_trace()
+#     return excerpts
+
+# #this is literally measure.offset!
+# # def get_measure_landmarks(state, part):
+# #     """compute the beat at the start of each measure. Used to ensure choir remians in time"""
+    
+# #     pdb.set_trace()
 
 def get_parts_streams(parts):
     """attach phonemes to every note in the score"""
@@ -273,9 +283,6 @@ def get_parts_streams(parts):
                 current_word.append(note)
 
                 head = coordinates[0] + 1
-        
-        print(parts_streams[part_name])
-        pdb.set_trace()
 
     return parts_streams
 
@@ -707,10 +714,11 @@ def min_singers_per_part(part):
 
 def recommended_singers_per_part(part):
     """compute the recommended number of singers per voice part so that notes in chords have the same number of singers per note"""
-    pdb.set_trace()
-    singer_voice_splits = get_singer_voice_splits(part)
-    recommended_singers = lcm([sum(measure) for measure in singer_voice_splits])
-    return recommended_singers
+    return lcm([len(stack) for stack in part.spread_iter()])
+
+    # singer_voice_splits = get_singer_voice_splits(part)
+    # recommended_singers = lcm([sum(measure) for measure in singer_voice_splits])
+    # return recommended_singers
 
 
 def lcm(factors):
@@ -746,26 +754,29 @@ if __name__ == '__main__':
     FS_out = 44100
     matt = singer(singer_name='matt', FS_out=FS_out)
 
-    # print('Creating samples...', end='')
     print('Creating samples...')
     sys.stdout.flush()
     ensemble_output = None
-    section_output = None
     num_singers = sum([n for n in parsed_score['num_singers'].values()])
     for part_name, split_parts in parsed_score['excerpts'].items():
+        section_output = None
         print(f'--> {part_name}')
-        for part in split_parts:
+        for i, part in enumerate(split_parts):
+            print(f'    --> singer {i}')
             sample = matt.sing_excerpt(part)
             if section_output is None:
                 section_output = sample
             else:
                 section_output = sum_samples(section_output, sample)
+        
         section_output /= parsed_score['num_singers'][part_name]
         if ensemble_output is None:
             ensemble_output = section_output
         else:
             ensemble_output = sum_samples(ensemble_output, section_output)
-    ensemble_output /= len(parsed_score['num_singers']) #divide by number of sections
+
+    # ensemble_output /= len(parsed_score['num_singers']) #divide by number of sections
+    ensemble_output /= num_singers
     print('Done')
 
     print('Playing output')
@@ -773,5 +784,6 @@ if __name__ == '__main__':
     play(ensemble_output, FS_out, block=False)
     
     pdb.set_trace()
-    # from scipy.io import wavfile
-    # wavfile.write(f'output/{parsed_score['song_name']}.wav', FS_out, ensemble_output)
+    from scipy.io import wavfile
+    wavfile.write(f"output/{parsed_score['song_name']}.wav", FS_out, ensemble_output)
+    pdb.set_trace()

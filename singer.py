@@ -5,6 +5,7 @@ from scipy.interpolate import CubicSpline
 import simpleaudio as sa
 import os
 from math import ceil, floor
+from fractions import Fraction as frac
 import time
 import json
 from lpc_to_wav import parse_lpc, pitched_sawtooth, pitched_square, pitched_squareDC, pitched_triangle, white_noise_t 
@@ -27,7 +28,7 @@ class singer():
         self.mode = mode
         
         self.phonemes = []  #list of phonemes that this voice can use. should set up a default phoneme for when one is requested that doesn't exist
-        self.default_phoneme = 'a'
+        self.default_phoneme = 'u'
         with open('phonemes.json') as f:
             self.phoneme_letters = json.load(f) #list of the utf-8 characters that are recognized phonemes
         
@@ -123,10 +124,13 @@ class singer():
 
 
     def sing_excerpt_lpc_mode(self, excerpt):
-        num_samples = sum([int(note['duration'] * self.FS_out) for note in excerpt])
+        # num_samples = sum([int(note['duration'] * self.FS_out) for note in excerpt])
+        num_samples = sum(int(note.duration * self.FS_out) for note in excerpt)
+
         sample_t = np.arange(num_samples, dtype=np.float64) / self.FS_out #time each sample occurs at
-        volumes = np.concatenate([np.ones(int(note['duration'] * self.FS_out), dtype=np.float64) * note['volume'] for note in excerpt])    
-        pitch = np.concatenate([np.ones(int(note['duration'] * self.FS_out), dtype=np.float64) * (note['pitch'] if note['volume'] != 0 else 0.00000000001) for note in excerpt])
+        # volumes = np.concatenate([np.ones(int(note.duration * self.FS_out), dtype=np.float64) * note.volume for note in excerpt]) #TODO
+        volumes = np.ones_like(sample_t) * 0.5 #for now all volume is 50%    
+        pitch = np.concatenate([np.ones(int(note.duration * self.FS_out), dtype=np.float64) * (note.pitch if note.is_sung() else 0.00000000001) for note in excerpt])
         
         phonemes, gains = zip(*[self.get_phoneme_gain_sequences(note) for note in excerpt])
         phonemes = np.concatenate(phonemes)
@@ -193,16 +197,16 @@ class singer():
 
     def get_phoneme_gain_sequences(self, note):
         """create an array of unicode characters representing the phoneme at each instant in the note"""
-        num_samples = int(note['duration'] * self.FS_out)
+        num_samples = int(note.duration * self.FS_out)
 
         sequence = np.chararray(num_samples, unicode=True)
         sequence[:] = '0' #set all unset phonemes to silent
 
         gains = np.zeros(num_samples, dtype=np.float64)
         
-        if note['volume'] != 0:            
+        if note.is_sung():            
             count = 0 #current sample position in the arrays
-            for phoneme, duration in self.partition_syllable(note['syllable'], note['duration']):
+            for phoneme, duration in self.clock_phonemes(note.phonemes, note.duration):
                 if phoneme not in self.phonemes:
                     phoneme = self.default_phoneme
                 phoneme_samples = int(duration * self.FS_out)
@@ -284,51 +288,65 @@ class singer():
             return np.concatenate(phoneme_samples)
 
 
-    def partition_syllable(self, syllable, duration):
-        #split the syllable into durations for each phoneme
-        #TODO: use rates from http://www.asel.udel.edu/icslp/cdrom/vol4/301/a301.pdf
+    # def partition_syllable(self, syllable, duration):
+    #     #split the syllable into durations for each phoneme
+    #     #TODO: use rates from http://www.asel.udel.edu/icslp/cdrom/vol4/301/a301.pdf
 
-        consonants = self.phoneme_letters['consonants']
-        vowels = self.phoneme_letters['vowels']
+    #     consonants = self.phoneme_letters['consonants']
+    #     vowels = self.phoneme_letters['vowels']
 
-        #verify that the word is made of correct characters
-        for p in syllable:
-            assert p in consonants or p in vowels
+    #     #verify that the word is made of correct characters
+    #     for p in syllable:
+    #         assert p in consonants or p in vowels
 
-        #break the syllable into an [optional] initial consonant (attack), middle vowel (sustain), and [optional] ending consonant (release)
-        attack, sustain, release = '', '', ''
+    #     #break the syllable into an [optional] initial consonant (attack), middle vowel (sustain), and [optional] ending consonant (release)
+    #     attack, sustain, release = '', '', ''
 
-        for p in syllable:
-            if p not in consonants:
-                break
-            attack += p
+    #     for p in syllable:
+    #         if p not in consonants:
+    #             break
+    #         attack += p
 
-        for p in syllable[len(attack):]:
-            if p not in vowels:
-                break
-            sustain += p
+    #     for p in syllable[len(attack):]:
+    #         if p not in vowels:
+    #             break
+    #         sustain += p
 
-        for p in syllable[len(attack+sustain):]:
-            if p not in consonants:
-                break
-            release += p
+    #     for p in syllable[len(attack+sustain):]:
+    #         if p not in consonants:
+    #             break
+    #         release += p
 
-        assert attack + sustain + release == syllable   #we should have successfuly split the entire syllable
-        assert len(sustain) > 0     #syllabars are of the form {C},V,{C}, i.e. sustain must contian a vowel
+    #     assert attack + sustain + release == syllable   #we should have successfuly split the entire syllable
+    #     assert len(sustain) > 0     #syllabars are of the form {C},V,{C}, i.e. sustain must contian a vowel
 
-        #compute the duration of each portion of the syllable
-        attack_duration = 0 if len(attack) == 0 else min(0.15, 0.25*duration)
-        release_duration = 0 if len(release) == 0 else min(0.15, 0.25*duration)
+    #     #compute the duration of each portion of the syllable
+    #     attack_duration = 0 if len(attack) == 0 else min(0.15, 0.25*duration)
+    #     release_duration = 0 if len(release) == 0 else min(0.15, 0.25*duration)
+    #     sustain_duration = duration - attack_duration - release_duration
+
+    #     #convert the three syllable portions into a single list of phonemes and durations
+    #     phoneme_duration_pairs = []
+    #     for group, duration in zip((attack, sustain, release), (attack_duration, sustain_duration, release_duration)):
+    #         for p in group:
+    #             phoneme_duration_pairs += [(p, duration / len(group))] #evenly split time between each component of the syllable group
+
+    #     return phoneme_duration_pairs
+
+
+    def clock_phonemes(self, phonemes, duration):
+        # compute the duration of each portion of the syllable
+        attack_duration = 0 if len(phonemes.attack) == 0 else min(frac(3, 20), frac(1, 4) * duration)
+        release_duration = 0 if len(phonemes.release) == 0 else min(frac(3, 20), frac(1, 4) * duration)
         sustain_duration = duration - attack_duration - release_duration
-
+        
         #convert the three syllable portions into a single list of phonemes and durations
         phoneme_duration_pairs = []
-        for group, duration in zip((attack, sustain, release), (attack_duration, sustain_duration, release_duration)):
+        for group, duration in zip((phonemes.attack, phonemes.sustain, phonemes.release), (attack_duration, sustain_duration, release_duration)):
             for p in group:
                 phoneme_duration_pairs += [(p, duration / len(group))] #evenly split time between each component of the syllable group
 
         return phoneme_duration_pairs
-
 
 
 def play(sample, FS=44100, block=True):
