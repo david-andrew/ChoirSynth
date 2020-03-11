@@ -777,6 +777,8 @@ if __name__ == '__main__':
 
     # ensemble_output /= len(parsed_score['num_singers']) #divide by number of sections
     ensemble_output /= num_singers
+    ensemble_output = np.tanh(ensemble_output)
+
     print('Done')
 
     print('Playing output')

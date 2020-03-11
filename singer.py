@@ -208,6 +208,7 @@ class singer():
             count = 0 #current sample position in the arrays
             for phoneme, duration in self.clock_phonemes(note.phonemes, note.duration):
                 if phoneme not in self.phonemes:
+                    print(f'unrecognized phoneme [{phoneme}]')
                     phoneme = self.default_phoneme
                 phoneme_samples = int(duration * self.FS_out)
                 sequence[count:count+phoneme_samples] = phoneme
