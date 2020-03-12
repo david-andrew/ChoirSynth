@@ -19,14 +19,11 @@ from staticnote import StaticSyllable
 
 class singer():
 
-    def __init__(self, singer_name='matt', FS_out=192000, mode='lpc'):#FS_out=192000, mode='sample'):
+    def __init__(self, singer_name='matt', FS_out=192000):#FS_out=192000, mode='sample'):
         self.name = singer_name
         
         self.FS_in = None
         self.FS_out = FS_out
-
-        assert(mode in ['sample', 'lpc'])
-        self.mode = mode
         
         self.phonemes = []  #list of phonemes that this voice can use. should set up a default phoneme for when one is requested that doesn't exist
         self.default_phoneme = 'u'
@@ -47,45 +44,8 @@ class singer():
         self.lpc = {} #coefficients and gains for lpc synthesis
         self.lpc_order = None
 
-        if self.mode == 'sample': 
-            self.load_samples()
-        else:
-            self.load_lpc()
 
-
-    # def load_samples(self):
-    #     """load single period waveforms for the specified singer"""
-    #     sample_folder = os.path.join('phoneme_data', 'single_period', self.name)
-    #     for subddir, dirs, files in os.walk(sample_folder):
-    #         for filename in files:
-    #             if os.path.splitext(filename)[-1] == '.wav':
-    #                 name, ext = os.path.splitext(filename)
-    #                 rate, sample = wavfile.read(os.path.join(sample_folder, filename))
-    #                 sample = np.concatenate((np.array([sample[-1]], dtype=np.float32), sample, np.array([sample[0]], dtype=np.float32))) #add the repeat sample to the end of the array
-    #                 spline = CubicSpline(np.arange(sample.shape[0]), sample)
-    #                 roots = spline.roots()
-    #                 length = sample.shape[0]
-    #                 lower = roots[0] if roots[0] > 0 else roots[1]
-    #                 upper = roots[-2] if roots[-2] - (length - 2) > 0 else roots[-1]
-
-
-    #                 if self.FS_in is None:     #set default sample rate, or verify that it's the same
-    #                     self.FS_in = rate
-    #                 else:
-    #                     assert(rate == self.FS_in)
-
-    #                 #save the sample plus its crossover point to the object
-    #                 self.phonemes.append(name)
-    #                 self.templates[name] = sample
-    #                 self.lcrosspoints[name] = lower
-    #                 self.ucrosspoints[name] = upper
-
-    #     #make template entries for aliased phonemes (e.g. j is pronounced with i, and approximate w is pronounced with u)
-    #     aliases = self.phoneme_letters['aliases']
-    #     for p, a in aliases.items():
-    #         self.templates[p] = self.templates[a]
-    #         self.lcrosspoints[p] = self.lcrosspoints[a]
-    #         self.ucrosspoints[p] = self.ucrosspoints[a]
+        self.load_lpc()
 
 
     def load_lpc(self):
@@ -118,19 +78,9 @@ class singer():
             'coeffs': np.zeros(self.lpc_order, dtype=np.float64),
             'gain': np.zeros(1, dtype=np.float64),
         }
-
-
+        
 
     def sing_excerpt(self, excerpt):
-        if self.mode == 'sample':
-            return self.sing_excerpt_sample_mode(excerpt)
-        elif self.mode == 'lpc':
-            return self.sing_excerpt_lpc_mode(excerpt)
-        else:
-            raise Exception(f'ERROR: {self.mode} mode is not a valid mode for the singer')
-
-
-    def sing_excerpt_lpc_mode(self, excerpt):
         # num_samples = sum([int(note['duration'] * self.FS_out) for note in excerpt])
         num_samples = sum(int(note.duration * self.FS_out) for note in excerpt)
 
@@ -164,43 +114,6 @@ class singer():
         return samples
 
 
-
-    # def get_phoneme_sequence(self, note):
-    #     """create an array of unicode characters representing the phoneme at each instant in the note"""
-    #     num_samples = int(note['duration'] * self.FS_out)
-    #     sequence = np.chararray(num_samples, unicode=True)
-
-    #     sequence[:] = '0' #set all unset phonemes to silent
-        
-    #     if note['volume'] != 0:
-            
-    #         count = 0
-    #         phoneme_duration_pairs = self.partition_syllable(note['syllable'], note['duration'])
-    #         for phoneme, duration in phoneme_duration_pairs:
-    #             if phoneme not in self.phonemes:
-    #                 phoneme = self.default_phoneme
-    #             phoneme_samples = int(note['duration'] * self.FS_out)
-    #             sequence[count:count+phoneme_samples] = phoneme
-    #             count += phoneme_samples
-    #         sequence[count:] = phoneme_duration_pairs[-1][0] #set any remaining samples to the last phoneme in the sequence
-
-    #     return sequence
-
-    # def get_phoneme_gains(self, note):
-    #     """create an array of gains for each phoneme at each instant in the note"""
-    #     num_samples = int(note['duration'] * self.FS_out)
-    #     gains = np.zeros(num_samples, dtype=np.float64)
-
-    #     if note['volume'] != 0:
-    #         assert(len(note['syllable']) == 1) #TODO->allow multiple phoneme syllable.
-    #         phoneme = note['syllable'] if note['syllable'] in self.phonemes else self.default_phoneme
-
-    #         #because not splitting up note into multiple phonemes at the moment, just assign the phoneme to the whole sample
-    #         gains[:] = self.lpc[phoneme]['gain']
-
-    #     return gains
-
-
     def sequence_phonetics(self, note):
         """create an array of unicode characters representing the phoneme at each instant in the note"""
         num_samples = int(note.duration * self.FS_out)
@@ -229,39 +142,7 @@ class singer():
             phonations[count:] = 0.0 if phoneme in self.unvoiced_phonemes else 1.0
         return sequence, gains, phonations
 
-    # def get_phoneme_lpc_arrays(self, note):
-    #     """create an array for the phoneme's lpc gains and coefficients"""
-    #     samples = int(note['duration'] * self.FS_in)
-    #     coeffs = np.zeros((samples, self.lpc_order), dtype=np.float64)
-    #     gains = np.zeros(samples, dtype=np.float64)
-
-    #     if note['volume'] != 0:
-    #         assert(len(note['syllable']) == 1) #TODO->allow multiple phoneme syllable.
-
-    #         phoneme = 'a' if note['syllable'] not in self.phonemes else note['syllable']
-    #         gains[:] = self.lpc[phoneme]['gain']
-    #         coeffs[None, :] = self.lpc[phoneme]['coeffs']
-
-    #     return gains, coeffs
-        
-
-
-    # def sing_excerpt_sample_mode(self, excerpt):
-    #     note_samples = []
-    #     for note in excerpt:
-    #         note_samples.append(self.sing_note(note))
-
-    #     start = 0
-    #     sample_length = sum([note_sample.shape[0] for note_sample in note_samples])
-    #     sample = np.zeros(sample_length)
-    #     for note_sample in note_samples:
-    #         sample[start:start+note_sample.shape[0]] = note_sample
-    #         start += len(note_sample)
-
-    #     # self.duration_error = 0
-    #     return sample
-
-
+ 
     def sing_note(self, note):
         #for now we are assuming all notes have just a single syllable. later on we will have to handle phoneme cluster cases i.e. dipthongs and tripthings. In the cases where there are more phonemes, all sounds are divided equally with their time
         duration = note['duration']
@@ -296,52 +177,6 @@ class singer():
                 phoneme_samples.append(np.tile(pitched_template, repeat))
                            
             return np.concatenate(phoneme_samples)
-
-
-    # def partition_syllable(self, syllable, duration):
-    #     #split the syllable into durations for each phoneme
-    #     #TODO: use rates from http://www.asel.udel.edu/icslp/cdrom/vol4/301/a301.pdf
-
-    #     consonants = self.phoneme_letters['consonants']
-    #     vowels = self.phoneme_letters['vowels']
-
-    #     #verify that the word is made of correct characters
-    #     for p in syllable:
-    #         assert p in consonants or p in vowels
-
-    #     #break the syllable into an [optional] initial consonant (attack), middle vowel (sustain), and [optional] ending consonant (release)
-    #     attack, sustain, release = '', '', ''
-
-    #     for p in syllable:
-    #         if p not in consonants:
-    #             break
-    #         attack += p
-
-    #     for p in syllable[len(attack):]:
-    #         if p not in vowels:
-    #             break
-    #         sustain += p
-
-    #     for p in syllable[len(attack+sustain):]:
-    #         if p not in consonants:
-    #             break
-    #         release += p
-
-    #     assert attack + sustain + release == syllable   #we should have successfuly split the entire syllable
-    #     assert len(sustain) > 0     #syllabars are of the form {C},V,{C}, i.e. sustain must contian a vowel
-
-    #     #compute the duration of each portion of the syllable
-    #     attack_duration = 0 if len(attack) == 0 else min(0.15, 0.25*duration)
-    #     release_duration = 0 if len(release) == 0 else min(0.15, 0.25*duration)
-    #     sustain_duration = duration - attack_duration - release_duration
-
-    #     #convert the three syllable portions into a single list of phonemes and durations
-    #     phoneme_duration_pairs = []
-    #     for group, duration in zip((attack, sustain, release), (attack_duration, sustain_duration, release_duration)):
-    #         for p in group:
-    #             phoneme_duration_pairs += [(p, duration / len(group))] #evenly split time between each component of the syllable group
-
-    #     return phoneme_duration_pairs
 
 
     def clock_phonemes(self, phonemes, duration):
