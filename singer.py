@@ -31,8 +31,13 @@ class singer():
         self.phonemes = []  #list of phonemes that this voice can use. should set up a default phoneme for when one is requested that doesn't exist
         self.default_phoneme = 'u'
         with open('phonetic_dictionary.json') as f:
-            phonetic_dictionary = json.load(f) #list of the utf-8 characters that are recognized phonemes
-            self.phoneme_letters = phonetic_dictionary['english']['u.s.']
+            phonetic_dictionary = json.load(f)['english']['u.s.'] #list of the utf-8 characters that are recognized phonemes
+            self.phoneme_aliases = phonetic_dictionary['aliases']
+            self.unvoiced_phonemes = set(phonetic_dictionary['unvoiced'])
+            # self.vowel_phonemes = set(phonetic_dictionary['vowels'])
+            # self.consonant_phonemes = set(phonetic_dictionary['consonants'])
+            # self.dipthong_phonemes = set(phonetic_dictionary['dipthongs'])
+
 
         self.templates = {}
         self.lcrosspoints = {}
@@ -103,7 +108,7 @@ class singer():
                         assert(order == self.lpc_order)
 
         #set up alias phonemes
-        for phoneme, alias in self.phoneme_letters['aliases'].items():
+        for phoneme, alias in self.phoneme_aliases.items():
             self.lpc[phoneme] = self.lpc[alias]
             self.phonemes.append(phoneme)
 
@@ -133,17 +138,16 @@ class singer():
         # volumes = np.concatenate([np.ones(int(note.duration * self.FS_out), dtype=np.float64) * note.volume for note in excerpt]) #TODO
         volumes = np.ones_like(sample_t) * 0.5 #for now all volume is 50%    
         pitch = np.concatenate([np.ones(int(note.duration * self.FS_out), dtype=np.float64) * (note.pitch if note.is_sung() else 0.00000000001) for note in excerpt])
-        
-        phonemes, gains = zip(*[self.get_phoneme_gain_sequences(note) for note in excerpt])
-        phonemes = np.concatenate(phonemes)
-        gains = np.concatenate(gains)
+
+        phonemes, gains, phonations = zip(*[self.sequence_phonetics(note) for note in excerpt])
+        phonemes, gains, phonations = np.concatenate(phonemes), np.concatenate(gains), np.concatenate(phonations)
 
         # phonemes = np.concatenate([self.get_phoneme_sequence(note) for note in excerpt])
         # gains = np.concatenate([self.get_phoneme_gains(note) for note in excerpt])
 
         #get buzz and noise. combine into a single source
         buzz, noise = pitched_squareDC(pitch, 0.25, sample_t), white_noise_t(sample_t)
-        source = 1.5 * buzz + 0.3 * noise
+        source = 1.5 * buzz * phonations + 0.3 * noise #combine noise with buzz. mute buzz when unvoiced
 
         samples = np.zeros(num_samples + self.lpc_order, dtype=np.float64) #preallocate samples array. pad with 'order' 0s before the start of the sample output, so that the filter draws from them before we have generated 'order' samples 
 
@@ -197,7 +201,7 @@ class singer():
     #     return gains
 
 
-    def get_phoneme_gain_sequences(self, note):
+    def sequence_phonetics(self, note):
         """create an array of unicode characters representing the phoneme at each instant in the note"""
         num_samples = int(note.duration * self.FS_out)
 
@@ -205,6 +209,7 @@ class singer():
         sequence[:] = '0' #set all unset phonemes to silent
 
         gains = np.zeros(num_samples, dtype=np.float64)
+        phonations = np.zeros(num_samples, dtype=np.float64) #when is it voiced vs unvoiced
         
         if note.is_sung():            
             count = 0 #current sample position in the arrays
@@ -215,12 +220,14 @@ class singer():
                 phoneme_samples = int(duration * self.FS_out)
                 sequence[count:count+phoneme_samples] = phoneme
                 gains[count:count+phoneme_samples] = self.lpc[phoneme]['gain']
+                phonations[count:count+phoneme_samples] = 0.0 if phoneme in self.unvoiced_phonemes else 1.0
 
                 count += phoneme_samples
 
             sequence[count:] = phoneme
             gains[count:] = self.lpc[phoneme]['gain']
-        return sequence, gains
+            phonations[count:] = 0.0 if phoneme in self.unvoiced_phonemes else 1.0
+        return sequence, gains, phonations
 
     # def get_phoneme_lpc_arrays(self, note):
     #     """create an array for the phoneme's lpc gains and coefficients"""
