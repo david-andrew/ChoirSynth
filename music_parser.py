@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QApplication, QFileDialog
 import music21
 from math import gcd
 import numpy as np
+from scipy.io import wavfile
 from fractions import Fraction as frac
 # from numpy import lcm
 import json
@@ -777,15 +778,22 @@ if __name__ == '__main__':
 
     # ensemble_output /= len(parsed_score['num_singers']) #divide by number of sections
     ensemble_output /= num_singers
-    ensemble_output = np.tanh(ensemble_output)
+    ensemble_output = np.tanh(ensemble_output) #squash output so no samples are greater than +/-1
+
+    #add reverb. TODO->ensure that this is a float, not 16-bit (have function load the thing)
+    print('Adding Reverb')
+    _, reverb_IR = wavfile.read('reverb/reverb1.wav')
+    ensemble_output = np.convolve(ensemble_output, reverb_IR)
+
 
     print('Done')
 
     print('Playing output')
     sys.stdout.flush()
     play(ensemble_output, FS_out, block=False)
-    
+
+
     pdb.set_trace()
-    from scipy.io import wavfile
+    
     wavfile.write(f"output/{parsed_score['song_name']}.wav", FS_out, ensemble_output)
     pdb.set_trace()
