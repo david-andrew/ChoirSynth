@@ -485,6 +485,13 @@ def syllable_asr(raw_syllable):
         release += p
         i += len(p)
 
+    #if sustain is diphthong, put second phoneme of diphthong on release
+    p = phonemes_starts_with(diphthongs, sustain)
+    if p == sustain and len(sustain) == 2:
+        sustain = p[0]
+        release = p[1] + release
+
+
     try:
         assert attack + sustain + release == raw_syllable   #we should have successfuly split the entire syllable
         assert len(sustain) > 0     #syllabars are of the form {C},V,{C}, i.e. sustain must contian a vowel
@@ -737,7 +744,7 @@ if __name__ == '__main__':
     #add reverb. TODO->ensure that this is a float, not 16-bit (have function load the thing)
     print('Adding Reverb')
     _, reverb_IR = wavfile.read('reverb/reverb1.wav')
-    ensemble_output = np.convolve(ensemble_output, reverb_IR)
+    # ensemble_output = np.convolve(ensemble_output, reverb_IR)
 
 
     print('Done')
@@ -750,4 +757,5 @@ if __name__ == '__main__':
     pdb.set_trace()
     
     wavfile.write(f"output/{parsed_score['song_name']}.wav", FS_out, ensemble_output)
+    wavfile.write(f"output/{parsed_score['song_name']}_reverb.wav", FS_out, np.convolve(ensemble_output, reverb_IR))
     pdb.set_trace()
