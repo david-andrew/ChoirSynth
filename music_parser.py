@@ -210,52 +210,6 @@ def get_excerpts(score, part, num_singers):
     return excerpts
 
 
-
-
-#     splits = get_singer_voice_splits(part)
-
-
-
-#     state = type('test', (), {})()                      #empty container class to hold the current state of the singer
-#     state.score = score                                 #store the score in the object
-#     state.metronome = score.metronomeMarkBoundaries()   #used for calculating tempo
-#     # landmarks = get_measure_landmarks(state, part) #compute the beat # for the start of each measure
-
-
-#     for singer_num in range(num_singers): #n'th singer run through the voice part
-#         excerpt = []
-        
-#         state.dynamics = 'mf'                               #reset dynamics to default
-#         state.beat = 0                                      #reset beat count to zero
-       
-#         for measure, split in zip(measures, splits):
-#             if len(split) == 1:
-#                 voice = measure
-#                 chord_num = singer_num % split[0]
-#             else:
-#                 remainder = singer_num % sum(split)
-#                 voice_num = 0
-#                 while remainder > sum(split[:voice_num+1]):
-#                     voice_num += 1
-#                 # measure = [element for element in measure if type(element) is music21.]
-#                 voices = [voice for voice in measure if type(voice) is music21.stream.Voice]
-#                 voice = voices[voice_num]
-#                 chord_num = remainder - sum(split[:voice_num])
-            
-#             excerpt += get_measure_notes(voice, chord_num, state)
-        
-#         #final post processing of the excerpt
-#         add_grace_duration(excerpt) #grace notes initiall have 0 duration. add a duration to them
-#         excerpts.append(excerpt)
-    
-#     return excerpts
-
-# #this is literally measure.offset!
-# # def get_measure_landmarks(state, part):
-# #     """compute the beat at the start of each measure. Used to ensure choir remians in time"""
-    
-# #     pdb.set_trace()
-
 def get_parts_streams(parts):
     """attach phonemes to every note in the score"""
 
