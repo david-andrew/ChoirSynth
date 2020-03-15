@@ -722,9 +722,8 @@ if __name__ == '__main__':
     num_singers = sum([n for n in parsed_score['num_singers'].values()])
     for part_name, split_parts in parsed_score['excerpts'].items():
         section_output = None
-        print(f'--> {part_name}')
         for i, part in enumerate(split_parts):
-            print(f'    --> singer {i}')
+            print(f'{part_name} #{i}')
             sample = matt.sing_excerpt(part)
             if section_output is None:
                 section_output = sample
